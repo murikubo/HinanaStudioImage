@@ -1,0 +1,102 @@
+{
+  "name": "hinana-studio-image",
+  "version": "0.6.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "author": "비나래",
+  "description": "Hinana Studio Image — non-destructive photo editor",
+  "main": "dist-electron/main.js",
+  "build": {
+    "appId": "studio.hinana.image",
+    "productName": "Hinana Studio Image",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.photography",
+      "target": [
+        "dmg"
+      ],
+      "identity": null,
+      "extraResources": [
+        {
+          "from": "native/bin/hinana-raw",
+          "to": "raw/hinana-raw"
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Hinana-Studio-Image-${version}-Windows-${arch}-Setup.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    },
+    "icon": "HinanaStudioIcon.png",
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Hinana Studio Image",
+      "deleteAppDataOnUninstall": false
+    },
+    "asarUnpack": [
+      "node_modules/@colorhythm/libraw-wasm/**/*",
+      "dist-electron/raw-*.mjs"
+    ]
+  },
+  "scripts": {
+    "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on http://localhost:5173 && node scripts/launch-electron.cjs --dev\"",
+    "build:electron": "npm run build:native && tsc -p electron/tsconfig.json && node scripts/copy-runtime.cjs",
+    "build": "tsc && vite build && npm run build:electron",
+    "preview": "vite preview",
+    "start": "node scripts/launch-electron.cjs",
+    "dist:win": "npm run build && electron-builder --win --x64",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dev:web": "vite --host 127.0.0.1",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:ui": "npm run build && node tests/smoke.mjs",
+    "format": "prettier --write src electron tests *.json *.ts",
+    "pack:mac": "npm run build && electron-builder --mac --dir",
+    "build:native": "node scripts/build-native.cjs",
+    "pack:win": "npm run build && electron-builder --win --x64 --dir"
+  },
+  "dependencies": {
+    "@colorhythm/libraw-wasm": "1.1.1",
+    "exifr": "^7.1.3",
+    "lucide-react": "1.25.0",
+    "piexifjs": "1.0.6",
+    "pngjs": "7.0.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "26.1.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "concurrently": "10.0.3",
+    "electron": "43.1.1",
+    "electron-builder": "26.15.3",
+    "prettier": "^3.9.6",
+    "typescript": "7.0.2",
+    "vite": "8.1.5",
+    "wait-on": "9.0.10"
+  }
+}

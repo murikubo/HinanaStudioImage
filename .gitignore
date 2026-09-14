@@ -1,0 +1,15 @@
+node_modules/
+dist/
+dist-electron/
+release/
+.DS_Store
+*.log
+
+native/bin/
+
+# Local workspace exports and credentials
+*.hinanaimage
+*.hinana
+.env
+.env.*
+!.env.example
