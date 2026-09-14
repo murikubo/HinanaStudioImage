@@ -1,8 +1,5 @@
 # Hinana Studio Image
 
-Lightroom에서 영감을 받은 한국어 데스크톱 사진 편집기, **v0.6.0**.
-기존 `/Users/hinana/HinanaStudio`의 Electron + React + TypeScript + Vite 구조를 참고해 독립된 프로젝트로 만들었습니다. 기존 영상 편집기 코드는 수정하지 않았습니다.
-
 ![편집 화면](docs/editor.png)
 
 ## 바로 실행
