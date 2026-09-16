@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import exifr from 'exifr';
+import { inflateSync } from 'node:zlib';
 const rawPath = process.argv[2];
 if (!rawPath) throw new Error('Usage: node tests/raw-smoke.mjs /absolute/path/to/photo.NEF');
 const original = await fs.readFile(rawPath);
@@ -58,6 +59,28 @@ try {
   await completed(projectFile);
   const project = JSON.parse(await fs.readFile(projectFile, 'utf8'));
   assert.equal(project.photos.length, 1);
+  assert.equal(project.photos[0].adjustments.colorSpace, 'display-p3');
+  const workingPNG = Buffer.from(project.photos[0].src.split(',')[1], 'base64');
+  let icc;
+  for (let at = 8; at < workingPNG.length;) {
+    const size = workingPNG.readUInt32BE(at);
+    if (workingPNG.toString('ascii', at + 4, at + 8) === 'iCCP') {
+      const data = workingPNG.subarray(at + 8, at + 8 + size);
+      icc = inflateSync(data.subarray(data.indexOf(0) + 2));
+    }
+    at += size + 12;
+  }
+  assert.ok(icc, 'RAW working PNG must carry ICC');
+  let redX;
+  for (let i = 0; i < icc.readUInt32BE(128); i++) {
+    const at = 132 + i * 12;
+    if (icc.toString('ascii', at, at + 4) === 'rXYZ')
+      redX = icc.readInt32BE(icc.readUInt32BE(at + 4) + 8) / 65536;
+  }
+  assert.ok(
+    redX > 0.5 && redX < 0.53,
+    'RAW profile must have P3 D50-adapted red primary, not sRGB',
+  );
   assert.ok(project.photos[0].width > 2000);
   assert.deepEqual(Buffer.from(project.photos[0].rawSource.split(',')[1], 'base64'), original);
   assert.equal(project.photos[0].adjustments.temperature, 24);
@@ -77,6 +100,7 @@ try {
   assert.equal(result.ISO, originalTags.ISO);
   assert.equal(result.ExifImageWidth, project.photos[0].width);
   assert.equal(result.Orientation, 1);
+  assert.equal(result.ColorSpace, 65535);
   await page.getByRole('button', { name: '모든 보정 초기화' }).click();
   page.on('dialog', (d) => d.accept());
   await page.getByTestId('project-file-input').setInputFiles(projectFile);
@@ -87,6 +111,18 @@ try {
   await page.getByText('RAW · 전체 해상도 현상', { exact: true }).waitFor();
   console.log(
     'PASS: autosave restore, RAW project reopen, JPEG export with camera EXIF and dimensions',
+  );
+  await page.getByRole('button', { name: '편집', exact: true }).click();
+  await page.getByLabel('작업 색공간', { exact: true }).selectOption('srgb');
+  await page.getByRole('button', { name: 'RAW 원본에서 P3 다시 현상', exact: true }).click();
+  await page.waitForFunction(
+    () => document.querySelector('select[aria-label="작업 색공간"]').value === 'display-p3',
+    {},
+    { timeout: 120000 },
+  );
+  assert.equal(await page.getByLabel('색온도', { exact: true }).inputValue(), '24');
+  console.log(
+    'PASS: RAW source PNG has P3 ICC; redevelop from project RAW restores P3 and retains edits',
   );
   const corrupt = path.join(downloads, 'corrupt.NEF');
   await fs.writeFile(corrupt, Buffer.from('not a RAW file'));

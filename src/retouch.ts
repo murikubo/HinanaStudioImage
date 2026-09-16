@@ -1,4 +1,10 @@
-export type SkinSettings = { skinSmooth: number; skinRedness: number; skinBrightness: number };
+import { p3ToSRGB, type WorkingColorSpace } from './color-space.ts';
+export type SkinSettings = {
+  skinSmooth: number;
+  skinRedness: number;
+  skinBrightness: number;
+  colorSpace?: WorkingColorSpace;
+};
 const smoothstep = (a: number, b: number, v: number) => {
   const t = Math.max(0, Math.min(1, (v - a) / (b - a)));
   return t * t * (3 - 2 * t);
@@ -26,6 +32,12 @@ export function retouchSkin(
 ) {
   if (!a.skinSmooth && !a.skinRedness && !a.skinBrightness) return;
   const source = data.slice();
+  const maskAt = (i: number) =>
+    a.colorSpace === 'display-p3'
+      ? skinWeight(...p3ToSRGB(source[i], source[i + 1], source[i + 2]))
+      : skinWeight(source[i], source[i + 1], source[i + 2]);
+  const masks = new Float32Array(data.length / 4);
+  for (let i = 0; i < data.length; i += 4) masks[i / 4] = maskAt(i);
   const radius = Math.max(1, Math.min(12, Math.round(Math.min(width, height) * 0.003)));
   let blurred = source;
   if (a.skinSmooth > 0) {
@@ -35,7 +47,7 @@ export function retouchSkin(
         for (let x = 0; x < width; x++) {
           const i = (y * width + x) * 4;
           out[i + 3] = source[i + 3];
-          if (!source[i + 3] || skinWeight(source[i], source[i + 1], source[i + 2]) < 0.01) {
+          if (!source[i + 3] || masks[i / 4] < 0.01) {
             out.set(blurred.subarray(i, i + 4), i);
             continue;
           }
@@ -69,7 +81,7 @@ export function retouchSkin(
   }
   for (let i = 0; i < data.length; i += 4) {
     if (!source[i + 3]) continue;
-    const mask = skinWeight(source[i], source[i + 1], source[i + 2]);
+    const mask = masks[i / 4];
     if (!mask) continue;
     const mix = ((mask * a.skinSmooth) / 100) * 0.85;
     let r = source[i] + (blurred[i] - source[i]) * mix;

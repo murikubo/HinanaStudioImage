@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { LibRaw } from '@colorhythm/libraw-wasm';
 import { PNG } from 'pngjs';
-import { rawExif, attachPngExif } from './raw-exif.mjs';
+import { rawExif, attachPngExif, attachPngICC } from './raw-exif.mjs';
 const require = createRequire(import.meta.url);
 let decoder;
 try {
@@ -20,7 +20,7 @@ try {
     throw new Error('RAW 사진은 60MP 이하만 지원합니다.');
   decoder.setHalfSize(0);
   decoder.setUseCameraWb(1);
-  decoder.setOutputColor(1); // sRGB
+  decoder.setOutputColor(7); // LibRaw P3-D65 primaries; gamma below is Display P3, not cinema DCI-P3.
   decoder.setOutputBps(8);
   decoder.setGamma(0, 1 / 2.4);
   decoder.setGamma(1, 12.92);
@@ -42,8 +42,12 @@ try {
     png.data[p + 2] = pixels[s + 2];
     png.data[p + 3] = 255;
   }
-  const exif = await rawExif(input, decoder, image.width, image.height);
-  await fs.writeFile(workerData.output, attachPngExif(PNG.sync.write(png), exif));
+  const exif = await rawExif(input, decoder, image.width, image.height, 'display-p3');
+  const profile = await fs.readFile(new URL('../dist/profiles/display-p3.icc', import.meta.url));
+  await fs.writeFile(
+    workerData.output,
+    attachPngICC(attachPngExif(PNG.sync.write(png), exif), profile),
+  );
   parentPort.postMessage({ ok: true });
 } catch (error) {
   parentPort.postMessage({ error: `RAW 현상 실패: ${error.message}` });

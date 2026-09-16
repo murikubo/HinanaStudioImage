@@ -24,6 +24,10 @@ jobs:
         run: node tests/smoke.mjs
         env:
           HINANA_TEST_APP: ${{ github.workspace }}\release\win-unpacked\Hinana Studio Image.exe
+      - name: Test Display P3 editing and ICC exports
+        run: node tests/p3-smoke.mjs
+        env:
+          HINANA_TEST_APP: ${{ github.workspace }}\release\win-unpacked\Hinana Studio Image.exe
       - name: Check Windows title bar layout
         run: node tests/window-layout.mjs
         env:

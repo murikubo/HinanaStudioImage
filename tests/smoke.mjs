@@ -50,7 +50,7 @@ try {
   );
   await page.getByRole('button', { name: '프로그램 정보', exact: true }).click();
   await page.getByRole('dialog').getByText('비나래', { exact: true }).waitFor();
-  await page.getByRole('dialog').getByText('Ver. 0.6.0', { exact: true }).waitFor();
+  await page.getByRole('dialog').getByText('Ver. 0.7.0', { exact: true }).waitFor();
   assert.ok(
     await page.locator('.about-icon').evaluate((img) => img.complete && img.naturalWidth > 1000),
   );
@@ -250,7 +250,12 @@ try {
     const c = document.createElement('canvas');
     c.width = image.width;
     c.height = image.height;
-    c.getContext('2d').drawImage(image, 0, 0);
+    c.getContext('2d', {
+      colorSpace: document
+        .querySelector('.canvas-holder canvas')
+        .getContext('2d')
+        .getContextAttributes().colorSpace,
+    }).drawImage(image, 0, 0);
     return c.toDataURL();
   }, resultData);
   assert.equal(exportedRetouch, retouched);
@@ -402,7 +407,12 @@ try {
       const c = document.createElement('canvas');
       c.width = img.width;
       c.height = img.height;
-      c.getContext('2d').drawImage(img, 0, 0);
+      c.getContext('2d', {
+        colorSpace: document
+          .querySelector('.canvas-holder canvas')
+          .getContext('2d')
+          .getContextAttributes().colorSpace,
+      }).drawImage(img, 0, 0);
       return c.toDataURL();
     },
     'data:image/png;base64,' + (await fs.readFile(retouchFile)).toString('base64'),

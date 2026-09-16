@@ -4,7 +4,7 @@
 
 ## 바로 실행
 
-Windows x64에서는 `release/Hinana-Studio-Image-0.6.0-Windows-x64-Setup.exe`로 설치합니다. 설치 위치를 선택할 수 있고, 시작 메뉴/바탕화면 바로가기를 만듭니다.
+Windows x64에서는 `release/Hinana-Studio-Image-0.7.0-Windows-x64-Setup.exe`로 설치합니다. 설치 위치를 선택할 수 있고, 시작 메뉴/바탕화면 바로가기를 만듭니다.
 
 macOS Apple Silicon용 빌드가 있으면 `release/mac-arm64/Hinana Studio Image.app`을 실행합니다.
 
@@ -30,12 +30,25 @@ npm run dev:web
 
 Electron 실행 파일이 없다는 오류가 나면 `node node_modules/electron/install.js`를 한 번 실행하세요. 개발 서버 기본 포트는 5173입니다.
 
+## v0.7.0 Display P3 색상 관리
+
+- 새로 불러온 사진은 **Display P3 작업 공간**에서 편집합니다. 원본 JPEG/PNG/WebP의 ICC 프로파일은 Chromium이 읽어 작업 공간으로 변환합니다. 프로파일이 없는 일반 사진은 sRGB로 해석합니다. 기존 프로젝트에서 색공간 항목이 없으면 sRGB를 유지합니다.
+- 오른쪽 **편집 / 색상·톤 → 작업 색공간**에서 sRGB와 Display P3를 선택합니다. 색상 믹서·톤 커브·기본 보정은 선택한 공간에서 동작하며, 피부 선택에는 색공간 변환을 적용합니다. 변경은 실행 취소/다시 실행 및 프로젝트/자동 저장에 포함됩니다. 프리셋과 보정 초기화는 작업 색공간을 유지합니다.
+- **sRGB 변환 미리보기**는 보정 결과를 sRGB로 변환했을 때의 화면을 보여 줍니다. 편집값이나 내보내기 색공간은 바꾸지 않습니다. 히스토그램은 작업 공간 기준입니다. 화면의 P3 지원 감지 결과도 표시합니다.
+- 내보내기에서 **작업 공간 유지 / sRGB / Display P3**를 선택합니다. 먼저 작업 공간에서 보정하고 최종 출력 공간으로 변환합니다. JPEG·PNG·WebP에 해당 ICC를 포함하며, EXIF를 제외하더라도 색상 ICC는 유지합니다. P3 EXIF ColorSpace는 65535(ICC로 규정), sRGB는 1로 기록합니다.
+- macOS Core Image와 Windows LibRaw 경로 모두 새 RAW를 처음부터 Display P3로 현상합니다. 이미 sRGB로 현상된 프로젝트는 **RAW 원본에서 P3 다시 현상**을 눌러 넓은 색역을 다시 가져올 수 있습니다. 현재 보정값/별점/원본 RAW는 유지하고, 실행 취소 기록은 재현상 결과부터 새로 시작합니다.
+- 기존 sRGB JPEG를 P3로 바꾸는 것만으로 잃어버린 색이 복구되지는 않습니다. RAW나 P3 원본이 필요합니다. P3 결과를 충실히 표시하려면 P3를 지원하고 색상 관리가 설정된 화면이 필요합니다.
+- 편집은 **8비트 SDR**입니다. HDR, 16비트 편집/출력, 영화용 DCI-P3 감마 2.6은 지원 범위가 아닙니다. 두 운영체제의 RAW 엔진 현상 결과는 다를 수 있습니다. P3 프로젝트는 v0.7.0 이상에서 여세요.
+
+검증: `npm test`, `node tests/p3-smoke.mjs`, `node tests/raw-smoke.mjs /path/to/photo.NEF`.
+Windows CI에도 P3 저장/복원과 ICC 출력 테스트를 포함했습니다.
+
 ## v0.6.0 Windows 지원
 
 - Windows x64 NSIS 설치 프로그램과 `npm run pack:win`의 설치 없는 실행 폴더를 제공합니다. Windows 10/11의 64비트 PC를 대상으로 합니다.
 - 어두운 상단바에 Windows 최소화/최대화/닫기 버튼 공간을 확보했습니다. 메뉴는 Alt로 열며, 도움말 메뉴에도 프로그램 정보를 넣었습니다. 사진 추가는 Ctrl+O로 표시합니다.
 - `.hinanaimage` 프로젝트는 macOS와 Windows가 같은 형식을 사용합니다. 현상된 이미지도 들어 있어 이동 후 다시 RAW를 디코딩하지 않습니다. 자동 저장은 각 기기에 별도로 보관됩니다.
-- Windows RAW 처리는 별도 코덱 설치 없이 로컬 Worker에서 실행합니다. 카메라 화이트밸런스, 전체 해상도, 8비트 sRGB 출력이며 120초 제한과 작업 후 Worker 정리를 적용합니다. macOS는 기존 Core Image 엔진을 유지하므로 새 RAW를 열었을 때 두 엔진의 색/크롭 결과가 다를 수 있습니다.
+- Windows RAW 처리는 별도 코덱 설치 없이 로컬 Worker에서 실행합니다. 카메라 화이트밸런스, 전체 해상도, 8비트 출력(v0.7.0부터 Display P3)이며 120초 제한과 작업 후 Worker 정리를 적용합니다. macOS는 기존 Core Image 엔진을 유지하므로 새 RAW를 열었을 때 두 엔진의 색/크롭 결과가 다를 수 있습니다.
 - Windows RAW의 내보내기 EXIF에는 읽을 수 있는 카메라/렌즈/ISO/노출/촬영 시각/작가/저작권/GPS의 표준 항목을 다시 구성합니다. 제조사 전용 MakerNote와 모든 EXIF 항목을 복제하지는 않습니다. 원본 RAW 바이트는 프로젝트에 그대로 보관합니다.
 - Windows용 RAW 엔진은 macOS에서도 `HINANA_RAW_ENGINE=wasm node tests/raw-smoke.mjs /absolute/path/to/photo.NEF`로 검증할 수 있습니다.
 - GitHub Actions Windows 작업은 단위 테스트 → 설치 파일 빌드 → 패키지 UI 테스트 → 실제 NEF 불러오기/내보내기 테스트를 실행하고 설치 파일을 artifact로 보관합니다. 외부 배포나 업로드된 저장소 생성은 이 작업에서 하지 않았습니다.
@@ -60,7 +73,7 @@ Electron 실행 파일이 없다는 오류가 나면 `node node_modules/electron
 
 - **상단 브랜드 아이콘**도 사용자 제공 앱 아이콘 이미지로 교체했습니다.
 - **RAW 불러오기/현상 (macOS)**: DNG, CR2, CR3, NEF, NRW, ARW, SRF, SR2, RAF, ORF, RW2, PEF, RWL, 3FR, FFF, IIQ, SRW, RAW 확장자를 선택하거나 드래그할 수 있습니다. 실제 지원 여부는 설치된 macOS의 카메라 RAW 지원에 따라 달라집니다.
-- `CIRAWFilter.outputImage`로 센서 데이터를 전체 해상도로 현상합니다. 내장 JPEG 미리보기로 대체하지 않습니다. 이후 편집은 기존 **8비트 sRGB** 작업 이미지에서 진행합니다. 센서 선형 데이터에서 다시 계산하는 노출/화이트밸런스 편집이나 16비트 출력은 아직 지원하지 않습니다.
+- `CIRAWFilter.outputImage`로 센서 데이터를 전체 해상도로 현상합니다. 내장 JPEG 미리보기로 대체하지 않습니다. 이후 편집은 기존 **8비트 작업 이미지(v0.7.0부터 Display P3)**에서 진행합니다. 센서 선형 데이터에서 다시 계산하는 노출/화이트밸런스 편집이나 16비트 출력은 아직 지원하지 않습니다.
 - **RAW 원본도 프로젝트에 포함**합니다. 원본은 수정하지 않으며, 프로젝트를 다시 열 때 저장된 현상 이미지와 편집값을 복원합니다. 정보 탭에서 RAW 작업 여부를 확인할 수 있습니다.
 - macOS ImageIO가 읽는 촬영 정보(TIFF/EXIF/GPS)를 현상 PNG로 전달하고, 이미지 내보내기에도 기존 EXIF 보존 옵션을 적용합니다. 제조사 전용 MakerNote 등 일부 항목은 macOS가 전달하지 않을 수 있지만 프로젝트의 RAW 원본 바이트는 보존합니다.
 - RAW는 **파일당 120MB / 60MP 이하**입니다. 현상 시간은 최대 120초이며 지원하지 않거나 손상된 파일은 오류를 표시하고 다른 사진의 편집을 유지합니다. RAW와 현상 PNG를 함께 저장하므로 메모리와 프로젝트 파일 용량이 증가합니다.
@@ -81,7 +94,7 @@ node tests/raw-smoke.mjs /absolute/path/to/photo.NEF
 ## v0.3.0 추가 기능
 
 - **EXIF 보존 내보내기**: JPEG·PNG·WebP에 원본 EXIF를 기본으로 유지합니다. 내보내기 창에서 체크를 해제하면 EXIF 없이 저장합니다. 카메라/렌즈/노출/촬영 시각과 원본 EXIF의 GPS 등도 유지합니다.
-- 회전과 자르기 후 방향을 정상 방향(1)으로 지정하고, 이미지/EXIF 픽셀 크기를 출력 크기로 갱신합니다. 원본의 오래된 썸네일 연결은 제거합니다. sRGB 출력에 맞춰 EXIF ColorSpace를 갱신합니다.
+- 회전과 자르기 후 방향을 정상 방향(1)으로 지정하고, 이미지/EXIF 픽셀 크기를 출력 크기로 갱신합니다. 원본의 오래된 썸네일 연결은 제거합니다. 출력 색공간에 맞춰 EXIF ColorSpace를 갱신합니다.
 - JPEG APP1, PNG eXIf, WebP EXIF 블록을 사용합니다. EXIF가 없는 원본은 그대로 내보내며, 손상된 EXIF 또는 JPEG 메타데이터 크기 제한 초과는 오류로 안내합니다. 이 경우 보존 체크를 해제하면 이미지 저장을 진행할 수 있습니다.
 - 별도 XMP·IPTC·ICC 블록 복사는 지원하지 않습니다. 원본 EXIF는 보존하지만 모든 외부 앱이 PNG/WebP의 EXIF를 표시하는 것은 아닙니다.
 - **새 앱 아이콘**: 사용자 제공 이미지를 macOS 앱/Dock과 프로그램 정보 창에 적용했습니다.
@@ -153,7 +166,7 @@ npm run dist:win # Windows 설치 파일 생성 (Windows 환경 권장)
 
 ## 첫 버전의 범위
 
-- 8비트 sRGB Canvas 기반 보정입니다. Lightroom의 RAW/색상 처리 엔진과 동일하지 않습니다.
+- 8비트 sRGB / Display P3 Canvas 기반 보정입니다. Lightroom의 RAW/색상 처리 엔진과 동일하지 않습니다.
 - HEIC/TIFF, 16비트 현상, ICC 워크플로, 부분 마스크, 자유 영역 자르기, 렌즈 보정, 일괄 내보내기는 미지원입니다.
 - 일반 사진당 80MB / 60MP 이하(RAW 120MB), 작업 공간당 최대 200장입니다. 실제 수용량은 메모리와 로컬 저장 공간에 따라 달라집니다.
 - 맞춤 미리보기는 긴 변 1600px입니다. 확대와 원본 내보내기는 원본 해상도로 처리하므로 대용량 사진에서는 잠시 시간이 걸릴 수 있습니다.

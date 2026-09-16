@@ -1,8 +1,9 @@
+import { deflateSync } from 'node:zlib';
 import exifr from 'exifr';
 import piexif from 'piexifjs';
 // Rebuild standard metadata: camera-specific offsets and RAW pixel strips cannot
 // be copied into a PNG/JPEG TIFF directory. The original stays in the project.
-export async function rawExif(input, decoder, width, height) {
+export async function rawExif(input, decoder, width, height, colorSpace = 'srgb') {
   const camera = decoder.getIParams(),
     other = decoder.getImgOther(),
     lens = decoder.getLensInfo();
@@ -19,7 +20,7 @@ export async function rawExif(input, decoder, width, height) {
   const exif = {
     [piexif.ExifIFD.PixelXDimension]: width,
     [piexif.ExifIFD.PixelYDimension]: height,
-    [piexif.ExifIFD.ColorSpace]: 1,
+    [piexif.ExifIFD.ColorSpace]: colorSpace === 'display-p3' ? 65535 : 1,
   };
   const string = (target, id, value) => {
     if (typeof value === 'string' && value.trim())
@@ -62,7 +63,17 @@ export async function rawExif(input, decoder, width, height) {
   return Buffer.from(piexif.dump({ '0th': zeroth, Exif: exif, GPS: gps }).slice(6), 'binary');
 }
 export function attachPngExif(png, tiff) {
-  const body = Buffer.concat([Buffer.from('eXIf'), tiff]);
+  return attachPngChunk(png, 'eXIf', tiff);
+}
+export function attachPngICC(png, icc) {
+  return attachPngChunk(
+    png,
+    'iCCP',
+    Buffer.concat([Buffer.from('Display P3\0\0'), deflateSync(icc)]),
+  );
+}
+function attachPngChunk(png, type, tiff) {
+  const body = Buffer.concat([Buffer.from(type), tiff]);
   let crc = 0xffffffff;
   for (const byte of body) {
     crc ^= byte;

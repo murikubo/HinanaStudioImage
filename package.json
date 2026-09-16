@@ -1,6 +1,6 @@
 {
   "name": "hinana-studio-image",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "license": "UNLICENSED",
   "author": "비나래",
@@ -57,7 +57,8 @@
     },
     "asarUnpack": [
       "node_modules/@colorhythm/libraw-wasm/**/*",
-      "dist-electron/raw-*.mjs"
+      "dist-electron/raw-*.mjs",
+      "dist/profiles/**/*"
     ]
   },
   "scripts": {
@@ -66,15 +67,15 @@
     "build": "tsc && vite build && npm run build:electron",
     "preview": "vite preview",
     "start": "node scripts/launch-electron.cjs",
-    "dist:win": "npm run build && electron-builder --win --x64",
-    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win --x64 --publish never",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
     "dev:web": "vite --host 127.0.0.1",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "test:ui": "npm run build && node tests/smoke.mjs",
     "format": "prettier --write src electron tests *.json *.ts",
-    "pack:mac": "npm run build && electron-builder --mac --dir",
+    "pack:mac": "npm run build && electron-builder --mac --dir --publish never",
     "build:native": "node scripts/build-native.cjs",
-    "pack:win": "npm run build && electron-builder --win --x64 --dir"
+    "pack:win": "npm run build && electron-builder --win --x64 --dir --publish never"
   },
   "dependencies": {
     "@colorhythm/libraw-wasm": "1.1.1",

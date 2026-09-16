@@ -90,6 +90,8 @@ export function validateProject(value: unknown): Project {
       throw new Error('프로젝트의 RAW 원본 데이터가 올바르지 않습니다.');
     ids.add(photo.id);
     const a = { ...defaults, ...photo.adjustments };
+    if (!['srgb', 'display-p3'].includes(a.colorSpace))
+      throw new Error('지원하지 않는 작업 색공간입니다.');
     for (const key of Object.keys(defaults) as (keyof Adjustments)[])
       if (
         typeof a[key] !== typeof defaults[key] ||

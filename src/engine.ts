@@ -1,6 +1,8 @@
+import { colorContext, type WorkingColorSpace } from './color-space.ts';
 import { applyColorTools, colorDefaults, type ColorAdjustments } from './color-tools.ts';
 import { retouchSkin } from './retouch.ts';
 export type Adjustments = ColorAdjustments & {
+  colorSpace: WorkingColorSpace;
   skinSmooth: number;
   skinRedness: number;
   skinBrightness: number;
@@ -22,6 +24,7 @@ export type Adjustments = ColorAdjustments & {
 };
 export const defaults: Adjustments = {
   ...colorDefaults,
+  colorSpace: 'srgb',
   skinSmooth: 0,
   skinRedness: 0,
   skinBrightness: 0,
@@ -123,11 +126,13 @@ export function adjustPixels(
   retouchSkin(data, width, height, a);
   const exp = 2 ** a.exposure,
     contrast = (1 + a.contrast / 100) ** 2;
+  const weights =
+    a.colorSpace === 'display-p3' ? [0.2289746, 0.6917385, 0.0792869] : [0.2126, 0.7152, 0.0722];
   for (let i = 0; i < data.length; i += 4) {
     let r = data[i] * exp,
       g = data[i + 1] * exp,
       b = data[i + 2] * exp;
-    const l = (r * 0.2126 + g * 0.7152 + b * 0.0722) / 255;
+    const l = (r * weights[0] + g * weights[1] + b * weights[2]) / 255;
     const shadow = (1 - Math.min(1, l)) ** 3,
       high = Math.min(1, l) ** 3;
     const shift =
@@ -138,7 +143,7 @@ export function adjustPixels(
     r = (r + shift - 128) * contrast + 128 + a.temperature * 0.65 + a.tint * 0.24;
     g = (g + shift - 128) * contrast + 128 - a.tint * 0.36;
     b = (b + shift - 128) * contrast + 128 - a.temperature * 0.65 + a.tint * 0.24;
-    const gray = r * 0.2126 + g * 0.7152 + b * 0.0722;
+    const gray = r * weights[0] + g * weights[1] + b * weights[2];
     const chroma = (Math.max(r, g, b) - Math.min(r, g, b)) / 255;
     const sat = (1 + a.saturation / 100) * (1 + (a.vibrance / 100) * (1 - Math.min(1, chroma)));
     r = gray + (r - gray) * sat;
@@ -178,7 +183,7 @@ export function renderPhoto(
   const scale = Math.min(1, maxSide / Math.max(w, h));
   canvas.width = Math.max(1, Math.round(w * scale));
   canvas.height = Math.max(1, Math.round(h * scale));
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  const ctx = colorContext(canvas, a.colorSpace);
   ctx.save();
   ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.scale(a.flip ? -1 : 1, 1);
@@ -191,7 +196,7 @@ export function renderPhoto(
     image.naturalHeight * scale,
   );
   ctx.restore();
-  const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height, { colorSpace: a.colorSpace });
   adjustPixels(pixels.data, canvas.width, canvas.height, a);
   ctx.putImageData(pixels, 0, 0);
   return pixels;

@@ -1633,3 +1633,45 @@ input[type='range']:disabled {
 .desktop-linux .topbar {
   padding-right: max(155px, calc(100vw - env(titlebar-area-width, 100vw) + 12px));
 }
+.color-management {
+  padding: 18px 20px;
+  border-bottom: 1px solid #34383a;
+  background: #c7d8b005;
+}
+.color-management > label:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #cddcba;
+}
+.color-management select {
+  min-width: 105px;
+  padding: 6px;
+  background: #191d1d;
+  border: 1px solid #454c43;
+  border-radius: 4px;
+}
+.color-management p {
+  font-size: 10px;
+  line-height: 1.7;
+  color: #8c9591;
+  margin: 10px 0 0;
+}
+.color-management .proof-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 11px;
+}
+.color-management input {
+  accent-color: #cddcba;
+}
+.raw-redevelop {
+  margin-top: 12px;
+  padding: 7px 8px;
+  border: 1px solid #454c43;
+  border-radius: 4px;
+  font-size: 10px;
+}

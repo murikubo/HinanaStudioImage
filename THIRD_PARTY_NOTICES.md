@@ -13,3 +13,8 @@ PNG encoding: pngjs (MIT), https://github.com/pngjs/pngjs.
 EXIF serialization: piexifjs (MIT), https://github.com/hMatoba/piexifjs.
 EXIF reading: exifr (MIT), https://github.com/MikeKovarik/exifr.
 Dependency license files are also included with their bundled npm packages.
+
+Output sRGB ICC: Compact-ICC-Profiles by Clinton Ingram (CC0 1.0),
+https://github.com/saucecontrol/Compact-ICC-Profiles. The license and profile
+provenance are included in `dist/profiles/`. The Display P3 profile was generated
+by a P3 Canvas PNG export from Chromium/Skia in Electron 43.1.1.

@@ -87,3 +87,15 @@ RAW 현상, 색상 정확도의 전문 계측, 60MP 경계 성능, Windows/Linux
 - Windows CSS를 적용한 상단바를 1000/1250/1540px에서 측정해 브랜드/탭/액션 사이 겹침이 없고 창 제어 버튼 공간이 확보됨을 확인했습니다. `docs/windows-layout.png`는 macOS에서 Windows CSS를 적용한 화면이며 실제 Windows 스크린샷이 아닙니다.
 - Windows x64 NSIS 설치 파일 생성을 완료했습니다. macOS 앱도 v0.6.0으로 빌드했습니다.
 - `.github/workflows/windows.yml`에 실제 Windows 패키지 UI/RAW/상단바 검증을 구성했습니다. 현재 로컬 환경은 macOS이며 이 워크플로를 원격으로 실행하지 않았습니다. Windows 설치/제거, 네이티브 창 버튼/DPI와 실제 Windows 실행 검증은 아직 남아 있습니다. Windows ARM64 네이티브 빌드와 Linux 배포도 이번 검증 범위에 포함하지 않습니다.
+
+## v0.7.0 Display P3 검증
+
+- 단위 테스트 30개 통과: 중립 P3 픽셀 보존, P3 기준 명도, P3→sRGB 색역 밖 판별, PNG ICC CRC/압축/교체, JPEG APP2와 WebP ICCP 중복 제거/플래그, EXIF 색공간 정규화를 포함합니다.
+- 합성 P3 주황/초록 패치를 앱으로 불러와 sRGB 변환 없이 P3 픽셀이 유지되는지 확인했습니다. 색공간 전환/실행 취소, HSL 편집, sRGB 미리보기, 프로젝트 저장/재열기/자동 복원, 색공간 필드가 없는 이전 프로젝트의 sRGB 기본값을 검증했습니다.
+- P3 JPEG/PNG/WebP를 내보내고 ICC 원문과 다시 디코딩한 P3 픽셀을 확인했습니다. PNG는 정확히 일치하고 손실 형식은 테스트 색상에서 채널 오차 5 이내였습니다. sRGB 출력은 픽셀이 실제로 변환되고 sRGB ICC가 포함됩니다. EXIF 해제 시에도 ICC가 유지됩니다.
+- 기존 통합 테스트의 피부 보정 및 HSL 출력 PNG 픽셀 일치 검증을 같은 색공간의 Canvas에서 비교하도록 보완했습니다. 전체 기존 테스트가 통과했습니다.
+- Nikon NEF를 macOS Core Image와 LibRaw WASM으로 각각 현상하고 PNG의 P3 ICC 원색 좌표를 확인했습니다. RAW 원본 보존, EXIF 포함 JPEG, 프로젝트 복원, 저장된 RAW에서 재현상 후 편집값 유지, 손상 RAW 오류 격리를 확인했습니다.
+- 패키징된 macOS 앱에서도 P3 전용 UI 테스트와 Windows용 WASM RAW 경로의 현상/재현상 테스트를 통과했습니다. Windows x64 설치 파일도 빌드했습니다. Windows CI에 P3 UI 테스트를 추가했습니다.
+- `docs/display-p3.png`에서 색상 관리와 HSL 도구 배치를 확인했습니다. 이 스크린샷은 색도 측정 자료가 아닙니다. 실제 모니터의 색 정확도 계측, HDR/16비트, 모든 카메라 모델 및 Windows 물리 디스플레이는 검증하지 않았습니다.
+
+기존 Windows CI 실패 로그를 확인한 결과 빌드는 완료되었으나 electron-builder의 자동 Release 게시가 GH_TOKEN 부재로 실패했습니다. 모든 배포/패키징 스크립트에 `--publish never`를 명시해 요청하지 않은 게시를 막고 후속 실행 테스트로 진행하도록 수정했습니다.

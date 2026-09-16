@@ -136,3 +136,37 @@ bundled by electron-builder. Runtime and LibRaw notices are included in
 workflow builds and tests the actual packaged EXE on windows-latest, downloads
 a pinned/checksummed public RAW fixture, and retains build artifacts. No release
 publishing step is configured.
+
+## v0.7.0 Display P3 pipeline
+
+`Adjustments.colorSpace` is `srgb | display-p3`. Defaults remain sRGB for old
+projects/history; new imports use P3 when supported. Original image data URLs
+retain their ICC, so Chromium converts from the source profile directly to the
+selected working Canvas without an intermediate sRGB Canvas. Canvas contexts
+cannot change colorSpace after creation, so the preview is remounted when its
+space changes. Both getImageData and Canvas creation explicitly name the space.
+P3 tone/saturation weights use the P3 D65 matrix's Y row. Skin-mask selection
+converts P3 to sRGB coordinates but applies edits to the original P3 buffer.
+
+Export renders in the working space first, then draws into a new Canvas in the
+output space. JPEG/PNG/WebP encoders were verified to retain P3 pixels. `icc.ts`
+embeds the matching bundled profile, replacing conflicting source declarations.
+PNG uses iCCP/CRC/zlib; JPEG uses APP2 ICC_PROFILE; WebP uses ICCP and VP8X flags.
+EXIF opt-out does not strip ICC. EXIF ColorSpace is 65535 for P3 and 1 for sRGB;
+old Interop pointers and TIFF ICC entries are dropped to avoid contradicting the
+output profile. EXIF sub-IFDs without next-IFD pointers are accepted.
+
+Core Image renders to CGColorSpace.displayP3. LibRaw uses output_color=7, which
+its source defines as DCI-P3 **D65** primaries, with gamm[0]=1/2.4 and
+gamm[1]=12.92 (the sRGB/Display P3 transfer curve, not cinema gamma 2.6).
+The worker embeds the bundled P3 ICC in its PNG. Profiles are unpacked alongside
+the worker for packaged runtime access. Existing RAW sources can be reprocessed
+via validated, size-limited IPC; only a temporary RAW file is written. Failure
+keeps the previous photo. Successful redevelopment preserves edits/rating and
+resets history because the backing image has changed.
+
+References:
+- https://www.w3.org/TR/css-color-4/#color-conversion-code
+- https://github.com/LibRaw/LibRaw/blob/master/src/postprocessing/postprocessing_utils_dcrdefs.cpp
+- https://github.com/LibRaw/LibRaw/blob/master/doc/API-datastruct.html
+- https://github.com/saucecontrol/Compact-ICC-Profiles

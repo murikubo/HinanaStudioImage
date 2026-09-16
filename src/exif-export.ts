@@ -1,3 +1,4 @@
+import type { WorkingColorSpace } from './color-space.ts';
 // Container references: https://www.w3.org/TR/png-3/#11eXIf
 // https://developers.google.com/speed/webp/docs/riff_container
 const ascii = (b: Uint8Array, start: number, size: number) =>
@@ -61,7 +62,12 @@ export function extractExif(b: Uint8Array): Uint8Array | undefined {
 }
 /** Retain original TIFF offsets (including GPS and vendor tags). Append replacement directories.
  * Orientation/dimensions describe rendered pixels; old thumbnail is no longer referenced. */
-export function normalizeExif(tiff: Uint8Array, width: number, height: number): Uint8Array {
+export function normalizeExif(
+  tiff: Uint8Array,
+  width: number,
+  height: number,
+  colorSpace: WorkingColorSpace = 'srgb',
+): Uint8Array {
   bound(tiff, 0, 8);
   const endian = ascii(tiff, 0, 2);
   if (endian !== 'II' && endian !== 'MM') throw fail();
@@ -71,7 +77,8 @@ export function normalizeExif(tiff: Uint8Array, width: number, height: number): 
   function entries(at: number): Map<number, Uint8Array> {
     bound(tiff, at, 2);
     const n = v.getUint16(at, le);
-    bound(tiff, at + 2, n * 12 + 4);
+    // EXIF sub-IFDs from valid encoders may omit a next-IFD pointer.
+    bound(tiff, at + 2, n * 12);
     const result = new Map<number, Uint8Array>();
     for (let i = 0; i < n; i++) {
       const pos = at + 2 + i * 12;
@@ -97,7 +104,10 @@ export function normalizeExif(tiff: Uint8Array, width: number, height: number): 
   root.set(0x101, scalar(0x101, height));
   exif.set(0xa002, scalar(0xa002, width));
   exif.set(0xa003, scalar(0xa003, height));
-  exif.set(0xa001, scalar(0xa001, 1, 3));
+  exif.set(0xa001, scalar(0xa001, colorSpace === 'display-p3' ? 65535 : 1, 3));
+  // Source interoperability declarations may name sRGB/Adobe RGB after conversion.
+  exif.delete(0xa005);
+  root.delete(0x8773);
   const base = tiff.length + (tiff.length % 2);
   const subAt = base;
   const rootAt = subAt + 2 + exif.size * 12 + 4;
@@ -208,6 +218,7 @@ export async function preserveExif(
   original: string,
   width: number,
   height: number,
+  colorSpace: WorkingColorSpace = 'srgb',
 ): Promise<Blob> {
   const raw = atob(original.slice(original.indexOf(',') + 1));
   const source = Uint8Array.from(raw, (c) => c.charCodeAt(0));
@@ -215,7 +226,7 @@ export async function preserveExif(
   if (!tiff) return blob;
   const result = injectExif(
     new Uint8Array(await blob.arrayBuffer()),
-    normalizeExif(tiff, width, height),
+    normalizeExif(tiff, width, height, colorSpace),
     blob.type,
     width,
     height,

@@ -25,7 +25,7 @@ if #available(macOS 12.0, *) {
         guard let image = raw.outputImage else { abortDecode("RAW 원본 데이터를 현상할 수 없습니다. 파일 또는 카메라 지원 여부를 확인해 주세요.") }
         let rect = image.extent.integral
         guard rect.width > 0, rect.height > 0, rect.width * rect.height <= 60_000_000 else { abortDecode("RAW 출력 크기가 허용 범위를 초과했습니다.") }
-        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+        let colorSpace = CGColorSpace(name: CGColorSpace.displayP3)!
         let context = CIContext(options: [.cacheIntermediates: false])
         guard let rendered = context.createCGImage(image, from: rect, format: .RGBA8, colorSpace: colorSpace) else { abortDecode("RAW 이미지 렌더링에 실패했습니다.") }
         var properties: [String: Any] = [:]
@@ -38,7 +38,7 @@ if #available(macOS 12.0, *) {
         var exif = properties[kCGImagePropertyExifDictionary as String] as? [String: Any] ?? [:]
         exif[kCGImagePropertyExifPixelXDimension as String] = rendered.width
         exif[kCGImagePropertyExifPixelYDimension as String] = rendered.height
-        exif[kCGImagePropertyExifColorSpace as String] = 1
+        exif[kCGImagePropertyExifColorSpace as String] = 65535
         properties[kCGImagePropertyExifDictionary as String] = exif
         var tiff = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any] ?? [:]
         tiff[kCGImagePropertyTIFFOrientation as String] = 1

@@ -1,3 +1,11 @@
+import { tagOutput } from './icc';
+import {
+  colorSpaceName,
+  supportsDisplayP3,
+  convertCanvas,
+  colorContext,
+  type WorkingColorSpace,
+} from './color-space';
 import ColorPanel from './ColorPanel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -163,6 +171,16 @@ function App() {
   const [tab, setTab] = useState<'edit' | 'color' | 'info'>('edit'),
     [exportOpen, setExportOpen] = useState(false),
     [helpOpen, setHelpOpen] = useState(false);
+  const [p3Supported] = useState(supportsDisplayP3);
+  const [proofSRGB, setProofSRGB] = useState(false);
+  const [exportColor, setExportColor] = useState<'working' | WorkingColorSpace>('working');
+  const [wideDisplay, setWideDisplay] = useState(() => matchMedia('(color-gamut: p3)').matches);
+  useEffect(() => {
+    const query = matchMedia('(color-gamut: p3)');
+    const update = () => setWideDisplay(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
   const [format, setFormat] = useState('jpeg'),
     [quality, setQuality] = useState(95),
     [exportSize, setExportSize] = useState('original');
@@ -243,9 +261,25 @@ function App() {
         }
         if (cancelled || !canvas.current) return;
         const settings = compare
-          ? { ...defaults, rotation: a.rotation, flip: a.flip, crop: a.crop }
+          ? {
+              ...defaults,
+              colorSpace: a.colorSpace,
+              rotation: a.rotation,
+              flip: a.flip,
+              crop: a.crop,
+            }
           : a;
-        const pixels = renderPhoto(image, canvas.current, settings, zoom ? Infinity : 1600);
+        const working =
+          proofSRGB && a.colorSpace === 'display-p3'
+            ? document.createElement('canvas')
+            : canvas.current;
+        const pixels = renderPhoto(image, working, settings, zoom ? Infinity : 1600);
+        if (working !== canvas.current) {
+          canvas.current.width = working.width;
+          canvas.current.height = working.height;
+          colorContext(canvas.current, 'srgb').drawImage(working, 0, 0);
+          working.width = working.height = 0;
+        }
         setBins(histogram(pixels.data));
       } catch (e) {
         notify((e as Error).message);
@@ -255,7 +289,7 @@ function App() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [active, a, compare, view, zoom, notify]);
+  }, [active, a, compare, view, zoom, proofSRGB, notify]);
   function change(values: Partial<Adjustments>, commit = false) {
     setPhotos((current) =>
       current.map((p) => {
@@ -280,6 +314,7 @@ function App() {
   function choose(id: string) {
     setSelected(id);
     setCompare(false);
+    setProofSRGB(false);
     setZoom(0);
   }
   const rawPattern =
@@ -329,8 +364,8 @@ function App() {
             rating: 0,
             metadata: await readMetadata(src),
             ...(rawSource ? { rawSource } : {}),
-            adjustments: { ...defaults },
-            history: [{ ...defaults }],
+            adjustments: { ...defaults, colorSpace: p3Supported ? 'display-p3' : 'srgb' },
+            history: [{ ...defaults, colorSpace: p3Supported ? 'display-p3' : 'srgb' }],
             cursor: 0,
           };
           imageCache.current.set(photo.id, image);
@@ -447,6 +482,41 @@ function App() {
       setBusy('');
     }
   }
+  async function redevelopRaw() {
+    if (!active?.rawSource || !window.hinana || busy) return;
+    const photo = active;
+    setBusy('RAW 원본에서 Display P3로 다시 현상 중');
+    try {
+      const result = await window.hinana.redevelopRaw(photo.rawSource!, photo.name);
+      const image = await loadImage(result.src);
+      const metadata = await readMetadata(result.src);
+      const next: Adjustments = { ...photo.adjustments, colorSpace: 'display-p3' };
+      imageCache.current.set(photo.id, image);
+      setPhotos((current) =>
+        current.map((p) =>
+          p.id === photo.id
+            ? {
+                ...p,
+                src: result.src,
+                width: image.naturalWidth,
+                height: image.naturalHeight,
+                metadata,
+                adjustments: next,
+                history: [next],
+                cursor: 0,
+              }
+            : p,
+        ),
+      );
+      setProofSRGB(false);
+      setCompare(false);
+      notify('RAW 원본을 Display P3로 다시 현상했습니다.');
+    } catch (error) {
+      notify(`RAW 재현상 실패: ${(error as Error).message}`);
+    } finally {
+      setBusy('');
+    }
+  }
   async function exportPhoto() {
     if (!active) return;
     setBusy('원본 해상도로 렌더링 중');
@@ -460,23 +530,27 @@ function App() {
         active.adjustments,
         exportSize === 'original' ? Infinity : Number(exportSize),
       );
+      const outputColor = exportColor === 'working' ? a.colorSpace : exportColor;
+      const encodedCanvas =
+        outputColor === a.colorSpace ? target : convertCanvas(target, outputColor);
       const blob = await new Promise<Blob>((resolve, reject) =>
-        target.toBlob(
+        encodedCanvas.toBlob(
           (b) => (b ? resolve(b) : reject(new Error('이미지 변환 실패'))),
           `image/${format}`,
           quality / 100,
         ),
       );
+      const tagged = await tagOutput(blob, outputColor, target.width, target.height);
       const exported = keepExif
-        ? await preserveExif(blob, active.src, target.width, target.height)
-        : blob;
+        ? await preserveExif(tagged, active.src, target.width, target.height, outputColor)
+        : tagged;
       download(
         exported,
         `${active.name.replace(/\.[^.]+$/, '')}-edited.${format === 'jpeg' ? 'jpg' : format}`,
       );
       setExportOpen(false);
       notify(`${target.width} × ${target.height} 이미지가 내보내졌습니다.`);
-      target.width = target.height = 0;
+      target.width = target.height = encodedCanvas.width = encodedCanvas.height = 0;
     } catch (e) {
       notify(`내보내기 실패: ${(e as Error).message}`);
     } finally {
@@ -702,6 +776,7 @@ function App() {
                 change(
                   {
                     ...defaults,
+                    colorSpace: a.colorSpace,
                     ...p.values,
                     skinSmooth: a.skinSmooth,
                     skinRedness: a.skinRedness,
@@ -833,7 +908,11 @@ function App() {
                 className="canvas-holder"
                 style={zoom ? { width: `${(dimensions[0] * zoom) / 100}px`, flexShrink: 0 } : {}}
               >
-                <canvas ref={canvas} aria-label="보정 사진 미리보기" />
+                <canvas
+                  key={`${selected}-${proofSRGB ? 'srgb' : a.colorSpace}`}
+                  ref={canvas}
+                  aria-label="보정 사진 미리보기"
+                />
                 {compare && <span className="before-label">BEFORE · 원본</span>}
                 {cropOpen && (
                   <div className="crop-grid">
@@ -1065,6 +1144,60 @@ function App() {
           </button>
         </div>
         <div className="adjust-scroll" key={tab}>
+          {tab !== 'info' && (
+            <section className="color-management" aria-label="색상 관리">
+              <label>
+                작업 색공간
+                <select
+                  aria-label="작업 색공간"
+                  value={a.colorSpace}
+                  disabled={!active || compare || !!busy}
+                  onChange={(e) => {
+                    setProofSRGB(false);
+                    change({ colorSpace: e.target.value as WorkingColorSpace }, true);
+                  }}
+                >
+                  <option value="srgb">sRGB</option>
+                  <option value="display-p3" disabled={!p3Supported}>
+                    Display P3
+                  </option>
+                </select>
+              </label>
+              <p>
+                {a.colorSpace === 'display-p3'
+                  ? '넓은 P3 색역에서 색상·톤과 피부를 보정합니다.'
+                  : '웹과 일반 화면에 적합한 sRGB 색역입니다.'}
+              </p>
+              {a.colorSpace === 'display-p3' && (
+                <label className="proof-option">
+                  <input
+                    type="checkbox"
+                    checked={proofSRGB}
+                    disabled={!active}
+                    onChange={(e) => setProofSRGB(e.target.checked)}
+                  />
+                  sRGB 변환 미리보기
+                </label>
+              )}
+              <p className="display-gamut">
+                {wideDisplay
+                  ? 'P3 표시 가능한 화면으로 감지됨'
+                  : '현재 화면의 P3 표시를 확인할 수 없습니다. 색역이 제한되어 보일 수 있습니다.'}
+              </p>
+              {active?.rawSource && (
+                <>
+                  <button
+                    className="raw-redevelop"
+                    disabled={!!busy || !p3Supported}
+                    onClick={() => void redevelopRaw()}
+                  >
+                    RAW 원본에서 P3 다시 현상
+                  </button>
+                  <p>현재 보정값은 유지하고 실행 취소 기록은 새로 시작합니다.</p>
+                </>
+              )}
+            </section>
+          )}
           {tab === 'info' ? (
             <section className="metadata-panel" aria-label="사진 EXIF 정보">
               <span className="eyebrow">PHOTO INFORMATION</span>
@@ -1089,7 +1222,7 @@ function App() {
                     <div className="raw-info">
                       <strong>RAW · 전체 해상도 현상</strong>
                       <p>
-                        RAW 엔진으로 현상한 sRGB 작업 이미지입니다. RAW 원본은 프로젝트에 함께
+                        RAW 엔진으로 현상한 작업 이미지입니다. RAW 원본은 프로젝트에 함께
                         보관됩니다.
                       </p>
                     </div>
@@ -1184,7 +1317,7 @@ function App() {
           <button
             disabled={!active || !changed}
             onClick={() => {
-              change({ ...defaults }, true);
+              change({ ...defaults, colorSpace: a.colorSpace }, true);
               setCompare(false);
             }}
           >
@@ -1262,6 +1395,20 @@ function App() {
               </select>
             </label>
             <label>
+              출력 색공간
+              <select
+                aria-label="출력 색공간"
+                value={exportColor}
+                onChange={(e) => setExportColor(e.target.value as typeof exportColor)}
+              >
+                <option value="working">작업 공간 유지 · {colorSpaceName(a.colorSpace)}</option>
+                <option value="srgb">sRGB · 웹 / 일반 화면</option>
+                <option value="display-p3" disabled={!p3Supported}>
+                  Display P3 · 넓은 색역
+                </option>
+              </select>
+            </label>
+            <label>
               이미지 크기
               <select
                 aria-label="이미지 크기"
@@ -1301,7 +1448,8 @@ function App() {
                 ? '촬영 정보·GPS 등 원본 EXIF 유지 · 방향과 크기는 보정 결과에 맞게 갱신'
                 : 'EXIF를 제외하고 저장'}
               <br />
-              sRGB · 원본 파일 유지
+              {colorSpaceName(exportColor === 'working' ? a.colorSpace : exportColor)} · ICC 색상
+              프로파일 포함 · 원본 파일 유지
             </div>
             <button className="primary" disabled={!!busy} onClick={exportPhoto}>
               {busy ? <LoaderCircle size={16} className="spin" /> : <ArrowDownToLine size={16} />}{' '}
