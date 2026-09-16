@@ -51,7 +51,7 @@ Windows CI에도 P3 저장/복원과 ICC 출력 테스트를 포함했습니다.
 - Windows RAW 처리는 별도 코덱 설치 없이 로컬 Worker에서 실행합니다. 카메라 화이트밸런스, 전체 해상도, 8비트 출력(v0.7.0부터 Display P3)이며 120초 제한과 작업 후 Worker 정리를 적용합니다. macOS는 기존 Core Image 엔진을 유지하므로 새 RAW를 열었을 때 두 엔진의 색/크롭 결과가 다를 수 있습니다.
 - Windows RAW의 내보내기 EXIF에는 읽을 수 있는 카메라/렌즈/ISO/노출/촬영 시각/작가/저작권/GPS의 표준 항목을 다시 구성합니다. 제조사 전용 MakerNote와 모든 EXIF 항목을 복제하지는 않습니다. 원본 RAW 바이트는 프로젝트에 그대로 보관합니다.
 - Windows용 RAW 엔진은 macOS에서도 `HINANA_RAW_ENGINE=wasm node tests/raw-smoke.mjs /absolute/path/to/photo.NEF`로 검증할 수 있습니다.
-- GitHub Actions Windows 작업은 단위 테스트 → 설치 파일 빌드 → 패키지 UI 테스트 → 실제 NEF 불러오기/내보내기 테스트를 실행하고 설치 파일을 artifact로 보관합니다. 외부 배포나 업로드된 저장소 생성은 이 작업에서 하지 않았습니다.
+- GitHub Actions Windows 작업은 단위 테스트 → 설치 파일 빌드 → 패키지 UI 테스트 → 실제 NEF 불러오기/내보내기 테스트를 실행하고 설치 파일을 artifact로 보관합니다. GitHub Release 자동 게시 없이 테스트 산출물만 보관합니다.
 
 ## v0.5.0 프리셋 정리와 색상·톤 도구
 
@@ -162,7 +162,7 @@ npm run dist:win # Windows 설치 파일 생성 (Windows 환경 권장)
 
 통합 테스트는 샘플 불러오기, 픽셀 변화, 실행 취소/다시 실행, 원본 비교, 자르기, 별점, 실제 파일 내보내기, 프로젝트 저장, 자동 복원, 검색을 검증합니다. 개발 서버가 필요하지 않습니다. UI 스크린샷은 `docs/`에 생성됩니다.
 
-개발용 macOS 패키지는 Apple 서명/공증을 하지 않습니다. Windows x64 설치 파일 생성과 공통 디코더는 macOS에서 검증했습니다. 실제 Windows 실행/설치 검증은 `.github/workflows/windows.yml`에 준비했으며 이 로컬 작업에서는 실행하지 못했습니다. Linux 배포는 아직 검증하지 않았습니다.
+개발용 macOS 패키지는 Apple 서명/공증을 하지 않습니다. Windows x64 설치 파일 빌드와 패키징된 EXE의 일반 편집/P3/RAW 실행 테스트는 GitHub Actions Windows 환경에서 통과했습니다. 설치 마법사 수동 실행과 물리 모니터의 색상 계측은 별도 검증이 필요합니다. Linux 배포는 아직 검증하지 않았습니다.
 
 ## 첫 버전의 범위
 

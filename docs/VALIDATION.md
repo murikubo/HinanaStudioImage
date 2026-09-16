@@ -99,3 +99,7 @@ RAW 현상, 색상 정확도의 전문 계측, 60MP 경계 성능, Windows/Linux
 - `docs/display-p3.png`에서 색상 관리와 HSL 도구 배치를 확인했습니다. 이 스크린샷은 색도 측정 자료가 아닙니다. 실제 모니터의 색 정확도 계측, HDR/16비트, 모든 카메라 모델 및 Windows 물리 디스플레이는 검증하지 않았습니다.
 
 기존 Windows CI 실패 로그를 확인한 결과 빌드는 완료되었으나 electron-builder의 자동 Release 게시가 GH_TOKEN 부재로 실패했습니다. 모든 배포/패키징 스크립트에 `--publish never`를 명시해 요청하지 않은 게시를 막고 후속 실행 테스트로 진행하도록 수정했습니다.
+
+### Windows 실제 실행 결과
+
+코드 커밋 `701686c`의 [Windows CI 실행](https://github.com/murikubo/HinanaStudioImage/actions/runs/35089093313)이 전체 성공했습니다. Windows에서 단위 테스트 30개, NSIS 빌드, 패키징된 EXE의 기존 기능 통합 테스트, P3 편집/ICC 출력, 상단바 배치, 실제 NEF 현상/재현상/프로젝트/EXIF 테스트와 산출물 업로드를 완료했습니다. 설치 마법사 수동 완주 및 물리 디스플레이 색도 측정은 이 자동 실행에 포함되지 않습니다.
