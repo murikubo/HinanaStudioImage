@@ -116,3 +116,7 @@ RAW 현상, 색상 정확도의 전문 계측, 60MP 경계 성능, Windows/Linux
 macOS v0.8.0 패키지에서도 HDR 전용 테스트와 전체 UI 통합 테스트를 통과했습니다. Windows x64 NSIS 설치 파일을 생성했으며 실제 Windows 실행은 추가된 CI에서 확인합니다.
 
 대용량 data URL 변환에서 `Uint8Array.from(string, mapper)`의 중간 배열 생성을 제거했습니다. 8MiB 합성 데이터의 로컬 Node 측정은 284ms → 11ms였고 바이트가 일치했습니다. 실제 RAW 복원에는 디스크/메타데이터/디코딩 시간도 포함됩니다. Windows의 기존 15초 RAW 복원 테스트 제한은 120초로 조정하고 실패 화면 로그를 추가했습니다.
+
+### v0.8.0 Windows 최종 결과
+
+최종 코드 `ecbf52c`의 [Windows CI](https://github.com/murikubo/HinanaStudioImage/actions/runs/35167493263)가 전체 성공했습니다. 단위 테스트 35개, NSIS 빌드, 실제 EXE의 기존 UI/P3/HDR·16비트 테스트, 상단바, Nikon NEF의 16비트 현상·자동 복원·내보내기·프로젝트 재열기·재현상·손상 파일 격리와 산출물 업로드가 모두 통과했습니다. 물리 HDR 패널의 절대 휘도 측정은 포함하지 않습니다.
