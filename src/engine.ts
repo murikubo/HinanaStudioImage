@@ -1,7 +1,9 @@
+import { applyLocalMasks, type LocalMask } from './local-masks.ts';
 import { colorContext, type WorkingColorSpace } from './color-space.ts';
 import { applyColorTools, colorDefaults, type ColorAdjustments } from './color-tools.ts';
 import { retouchSkin } from './retouch.ts';
 export type Adjustments = ColorAdjustments & {
+  masks: LocalMask[];
   colorSpace: WorkingColorSpace;
   precision: 'legacy' | 'float';
   dynamicRange: 'sdr' | 'hdr';
@@ -27,6 +29,7 @@ export type Adjustments = ColorAdjustments & {
 };
 export const defaults: Adjustments = {
   ...colorDefaults,
+  masks: [],
   colorSpace: 'srgb',
   precision: 'legacy',
   dynamicRange: 'sdr',
@@ -205,6 +208,22 @@ export function renderPhoto(
   ctx.restore();
   const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height, { colorSpace: a.colorSpace });
   adjustPixels(pixels.data, canvas.width, canvas.height, a);
+  applyLocalMasks(
+    pixels.data,
+    canvas.width,
+    canvas.height,
+    a.masks || [],
+    {
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      cropWidth: w,
+      cropHeight: h,
+      rotation: a.rotation,
+      flip: a.flip,
+    },
+    a.colorSpace,
+    false,
+  );
   ctx.putImageData(pixels, 0, 0);
   return pixels;
 }

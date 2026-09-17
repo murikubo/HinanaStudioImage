@@ -1,3 +1,4 @@
+import { validateMasks } from './local-masks.ts';
 import { readMetadata, type Metadata } from './metadata';
 import { defaults, type Adjustments } from './engine';
 export type Photo = {
@@ -13,7 +14,7 @@ export type Photo = {
   history: Adjustments[];
   cursor: number;
 };
-export type Project = { version: 1 | 2; photos: Photo[]; selected: string };
+export type Project = { version: 1 | 2 | 3; photos: Photo[]; selected: string };
 function db(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const r = indexedDB.open('hinana-image', 1);
@@ -66,7 +67,7 @@ export function validateProject(value: unknown): Project {
   const p = value as Project;
   if (
     !p ||
-    (p.version !== 1 && p.version !== 2) ||
+    (p.version !== 1 && p.version !== 2 && p.version !== 3) ||
     !Array.isArray(p.photos) ||
     p.photos.length > 200
   )
@@ -125,6 +126,7 @@ export function validateProject(value: unknown): Project {
           throw new Error('보정 값 범위를 초과했습니다.');
       }
     }
+    a.masks = validateMasks(a.masks);
     photo.adjustments = a;
     photo.history = [a];
     photo.cursor = 0;

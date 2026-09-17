@@ -1,3 +1,4 @@
+import { applyLocalMasks } from './local-masks.ts';
 import { adjustPixels, outputSize, type Adjustments } from './engine.ts';
 import { type FloatFrame } from './precision-codec.ts';
 import { P3_SRGB, SRGB_P3, transform, linear, encoded } from './precision-math.ts';
@@ -56,5 +57,21 @@ export function renderFloat(source: FloatFrame, a: Adjustments, maxSide: number)
     for (let c = 0; c < 3; c++) data[i + c] = Math.max(0, linear(data[i + c] / 255));
     data[i + 3] /= 255;
   }
+  applyLocalMasks(
+    data,
+    width,
+    height,
+    a.masks || [],
+    {
+      width: source.width,
+      height: source.height,
+      cropWidth: cw,
+      cropHeight: ch,
+      rotation: a.rotation,
+      flip: a.flip,
+    },
+    a.colorSpace,
+    true,
+  );
   return { width, height, data, colorSpace: a.colorSpace, hdr: a.dynamicRange === 'hdr' };
 }

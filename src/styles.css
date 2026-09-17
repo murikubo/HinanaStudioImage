@@ -1679,3 +1679,86 @@ input[type='range']:disabled {
   border-radius: 4px;
   font-size: 10px;
 }
+
+.mask-panel {
+  padding: 20px;
+}
+.mask-panel h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+.mask-panel p {
+  font-size: 11px;
+  color: #939d98;
+  line-height: 1.7;
+}
+.mask-panel button {
+  border: 1px solid #475148;
+  border-radius: 5px;
+  padding: 7px 8px;
+  background: #242a27;
+  font-size: 11px;
+}
+.mask-create {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px 0;
+}
+.mask-list {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.mask-list button {
+  text-align: left;
+}
+.mask-list .active {
+  border-color: #cddcba;
+  color: #cddcba;
+}
+.mask-panel fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.mask-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+.mask-toggle {
+  display: block;
+  margin: 12px 0;
+  font-size: 11px;
+}
+.mask-panel input[type='checkbox'] {
+  accent-color: #cddcba;
+  margin-right: 7px;
+}
+.mask-slider {
+  display: block;
+  margin: 18px 0;
+  font-size: 11px;
+}
+.mask-slider output {
+  float: right;
+  color: #cddcba;
+}
+.mask-slider input {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  accent-color: #cddcba;
+}
+.mask-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: crosshair;
+}

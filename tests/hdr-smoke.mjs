@@ -102,7 +102,7 @@ try {
   assert.ok(reopened.data.at(-4) > 3.9);
   await page.getByTitle('프로젝트 저장 (⌘/Ctrl S)').click();
   const project = JSON.parse(await file('Hinana-Workspace.hinanaimage'));
-  assert.equal(project.version, 2);
+  assert.equal(project.version, 3);
   assert.equal(project.photos[0].adjustments.dynamicRange, 'hdr');
   assert.equal(project.photos[0].adjustments.precision, 'float');
   await page.waitForFunction(() =>

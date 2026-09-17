@@ -1,3 +1,4 @@
+import { MaskPanel, MaskOverlay } from './MaskEditor';
 import {
   requestPrecision,
   paintFloat,
@@ -174,12 +175,14 @@ function App() {
     [zoom, setZoom] = useState(0),
     [cropOpen, setCropOpen] = useState(false),
     [leftOpen, setLeftOpen] = useState(true);
-  const [tab, setTab] = useState<'edit' | 'color' | 'info'>('edit'),
+  const [tab, setTab] = useState<'edit' | 'color' | 'info' | 'mask'>('edit'),
     [exportOpen, setExportOpen] = useState(false),
     [helpOpen, setHelpOpen] = useState(false);
   const [p3Supported] = useState(supportsDisplayP3);
   const [proofSRGB, setProofSRGB] = useState(false);
   const [proofSDR, setProofSDR] = useState(false);
+  const [maskId, setMaskId] = useState('');
+  const [maskOverlay, setMaskOverlay] = useState(true);
   const [hdrDisplay, setHdrDisplay] = useState(() => matchMedia('(dynamic-range: high)').matches);
   useEffect(() => {
     const q = matchMedia('(dynamic-range: high)');
@@ -247,7 +250,7 @@ function App() {
     let obsolete = false;
     setSaveStatus('저장 중…');
     const timer = setTimeout(() => {
-      saveWorkspace({ version: 2, photos, selected })
+      saveWorkspace({ version: 3, photos, selected })
         .then(() => {
           if (!obsolete) {
             setSavedSnapshot({ photos, selected });
@@ -500,7 +503,7 @@ function App() {
     setBusy('프로젝트 저장 중');
     try {
       download(
-        new Blob([JSON.stringify({ version: 2, photos, selected })], { type: 'application/json' }),
+        new Blob([JSON.stringify({ version: 3, photos, selected })], { type: 'application/json' }),
         'Hinana-Workspace.hinanaimage',
       );
       notify('원본과 보정값을 포함한 프로젝트를 저장했습니다.');
@@ -730,7 +733,7 @@ function App() {
   const changed = (Object.keys(defaults) as (keyof Adjustments)[]).some(
     (key) =>
       !['colorSpace', 'precision', 'dynamicRange', 'hdrPeak'].includes(key) &&
-      a[key] !== defaults[key],
+      JSON.stringify(a[key]) !== JSON.stringify(defaults[key]),
   );
   const dimensions = active ? outputSize(active.width, active.height, a) : [0, 0];
   return (
@@ -891,6 +894,7 @@ function App() {
                     dynamicRange: a.dynamicRange,
                     hdrPeak: a.hdrPeak,
                     ...p.values,
+                    masks: a.masks,
                     skinSmooth: a.skinSmooth,
                     skinRedness: a.skinRedness,
                     skinBrightness: a.skinBrightness,
@@ -1026,6 +1030,24 @@ function App() {
                   ref={canvas}
                   aria-label="보정 사진 미리보기"
                 />
+                {tab === 'mask' && !compare && !busy && (
+                  <MaskOverlay
+                    key={selected}
+                    mask={a.masks.find((m) => m.id === maskId) || a.masks[0]}
+                    show={maskOverlay}
+                    geometry={{
+                      width: active.width,
+                      height: active.height,
+                      cropWidth: dimensions[0],
+                      cropHeight: dimensions[1],
+                      rotation: a.rotation,
+                      flip: a.flip,
+                    }}
+                    onChange={(mask) =>
+                      change({ masks: a.masks.map((m) => (m.id === mask.id ? mask : m)) }, true)
+                    }
+                  />
+                )}
                 {compare && <span className="before-label">BEFORE · 원본</span>}
                 {cropOpen && (
                   <div className="crop-grid">
@@ -1252,12 +1274,15 @@ function App() {
           <button className={tab === 'color' ? 'active' : ''} onClick={() => setTab('color')}>
             <Palette size={15} /> 색상·톤
           </button>
+          <button className={tab === 'mask' ? 'active' : ''} onClick={() => setTab('mask')}>
+            ◉ 마스크
+          </button>
           <button className={tab === 'info' ? 'active' : ''} onClick={() => setTab('info')}>
             <Camera size={15} /> 정보
           </button>
         </div>
         <div className="adjust-scroll" key={tab}>
-          {tab !== 'info' && (
+          {tab !== 'info' && tab !== 'mask' && (
             <section className="color-management" aria-label="색상 관리">
               <label>
                 편집 정밀도
@@ -1439,6 +1464,16 @@ function App() {
                 </>
               )}
             </section>
+          ) : tab === 'mask' ? (
+            <MaskPanel
+              masks={a.masks}
+              selected={maskId}
+              onSelect={setMaskId}
+              showOverlay={maskOverlay}
+              onOverlay={setMaskOverlay}
+              disabled={!active || compare || !!busy}
+              onChange={(masks, commit) => change({ masks }, commit)}
+            />
           ) : tab === 'edit' ? (
             <>
               <div className="profile-row">
@@ -1467,7 +1502,7 @@ function App() {
                             {Number(a[control.key]) > 0 ? '+' : ''}
                             {control.key === 'exposure'
                               ? Number(a[control.key]).toFixed(2)
-                              : a[control.key]}
+                              : String(a[control.key])}
                           </output>
                         </span>
                         <input
