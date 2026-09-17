@@ -1,3 +1,4 @@
+import { dataURLBytes } from './image-bytes.ts';
 import type { WorkingColorSpace } from './color-space.ts';
 // Container references: https://www.w3.org/TR/png-3/#11eXIf
 // https://developers.google.com/speed/webp/docs/riff_container
@@ -220,8 +221,7 @@ export async function preserveExif(
   height: number,
   colorSpace: WorkingColorSpace | 'rec2100-pq' = 'srgb',
 ): Promise<Blob> {
-  const raw = atob(original.slice(original.indexOf(',') + 1));
-  const source = Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  const source = dataURLBytes(original);
   const tiff = extractExif(source);
   if (!tiff) return blob;
   const result = injectExif(

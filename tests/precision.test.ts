@@ -95,3 +95,13 @@ test('16-bit P3 ICC and EXIF orientation are decoded without an 8-bit round trip
   assert.equal(rotated.height, 2);
   assert.deepEqual(rotated.data, frame.data);
 });
+
+test('large image data URLs decode byte-for-byte without iterable expansion', async () => {
+  const { dataURLBytes } = await import('../src/image-bytes.ts');
+  const bytes = Buffer.alloc(1024 * 1024);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = i % 256;
+  assert.deepEqual(
+    Buffer.from(dataURLBytes('data:image/png;base64,' + bytes.toString('base64'))),
+    bytes,
+  );
+});

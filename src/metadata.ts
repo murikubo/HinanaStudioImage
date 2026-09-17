@@ -1,3 +1,4 @@
+import { dataURLBytes } from './image-bytes.ts';
 import exifr from 'exifr';
 import { extractExif } from './exif-export.ts';
 export type Metadata = {
@@ -9,8 +10,7 @@ export async function readMetadata(input: Blob | string | Uint8Array): Promise<M
   try {
     let raw: Uint8Array;
     if (typeof input === 'string') {
-      const binary = atob(input.slice(input.indexOf(',') + 1));
-      raw = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+      raw = dataURLBytes(input);
     } else if (input instanceof Blob) raw = new Uint8Array(await input.arrayBuffer());
     else raw = input;
     const tags = await exifr.parse(extractExif(raw) || raw, {

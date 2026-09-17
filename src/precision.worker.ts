@@ -1,3 +1,4 @@
+import { dataURLBytes } from './image-bytes.ts';
 import { decodePrecisionPNG, encodePrecisionPNG, type FloatFrame } from './precision-codec';
 import { linear } from './precision-math';
 import { renderFloat } from './precision-engine';
@@ -25,8 +26,7 @@ self.onmessage = (
       cachedKey = '';
       const source = request.source;
       if (source.src) {
-        const s = atob(source.src.slice(source.src.indexOf(',') + 1));
-        const bytes = Uint8Array.from(s, (c) => c.charCodeAt(0));
+        const bytes = dataURLBytes(source.src);
         cached = decodePrecisionPNG(bytes);
       } else {
         const input = source.data!;

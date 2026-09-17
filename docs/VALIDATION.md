@@ -106,7 +106,7 @@ RAW 현상, 색상 정확도의 전문 계측, 60MP 경계 성능, Windows/Linux
 
 ## v0.8.0 HDR / 고정밀 검증
 
-- 단위 테스트 34개 통과. 16비트 PNG의 4,096단계 그라데이션은 노출 보정 후에도 4,000개 이상의 단계를 유지하며, 중립 sRGB 왕복은 16비트 코드값 오차 1 이내입니다. 원본 불변성, 선형 회전, P3 매트릭스/TRC ICC, EXIF 방향, ST 2084 PQ 기준값과 HDR headroom 왕복을 검증했습니다.
+- 단위 테스트 35개 통과. 16비트 PNG의 4,096단계 그라데이션은 노출 보정 후에도 4,000개 이상의 단계를 유지하며, 중립 sRGB 왕복은 16비트 코드값 오차 1 이내입니다. 원본 불변성, 선형 회전, P3 매트릭스/TRC ICC, EXIF 방향, ST 2084 PQ 기준값과 HDR headroom 왕복을 검증했습니다.
 - Electron 앱에서 16비트 PNG 입력·출력, ICC/EXIF, PQ Rec.2020 cICP, HDR 재불러오기, 프로젝트 v2 저장/자동 복원을 확인했습니다. 기존 v1 프로젝트는 8비트 경로로 복원됩니다.
 - HDR Canvas API와 float16 픽셀 값 2.0 유지, 앱의 HDR 미리보기 경로 및 SDR 대체 경로를 테스트했습니다. HDR 표시 감지 신호를 강제로 설정하는 테스트는 픽셀 전달만 검증하며 실제 HDR 패널의 휘도 측정은 아닙니다. `docs/hdr-editing.png`는 SDR로 찍은 UI 배치 확인용 그라데이션입니다.
 - 기존 전체 UI 및 P3 회귀 테스트를 통과했습니다. macOS Core Image와 Windows용 LibRaw WASM 경로에서 실제 Nikon NEF의 현상 PNG가 16비트이며 P3 ICC를 포함하는 것을 확인했습니다. RAW 원본/EXIF 보존, 재현상, 프로젝트 복원과 손상 파일 격리도 통과했습니다.
@@ -114,3 +114,5 @@ RAW 현상, 색상 정확도의 전문 계측, 60MP 경계 성능, Windows/Linux
 - 구현 참고: [W3C HDR PQ PNG](https://www.w3.org/TR/png-hdr-pq/), [PNG 3 설명](https://github.com/w3c/PNG-spec/blob/main/Third_Edition_Explainer.md), Chromium의 `CanvasHDR` 전용 기능과 `configureHighDynamicRange`. HDR 입력/출력과 모니터에서의 실제 HDR 표시는 구분합니다.
 
 macOS v0.8.0 패키지에서도 HDR 전용 테스트와 전체 UI 통합 테스트를 통과했습니다. Windows x64 NSIS 설치 파일을 생성했으며 실제 Windows 실행은 추가된 CI에서 확인합니다.
+
+대용량 data URL 변환에서 `Uint8Array.from(string, mapper)`의 중간 배열 생성을 제거했습니다. 8MiB 합성 데이터의 로컬 Node 측정은 284ms → 11ms였고 바이트가 일치했습니다. 실제 RAW 복원에는 디스크/메타데이터/디코딩 시간도 포함됩니다. Windows의 기존 15초 RAW 복원 테스트 제한은 120초로 조정하고 실패 화면 로그를 추가했습니다.

@@ -1,3 +1,4 @@
+import { dataURLBytes } from './image-bytes.ts';
 import type { Adjustments } from './engine';
 import { colorContext, type WorkingColorSpace } from './color-space';
 import { pngInfo, type FloatFrame } from './precision-codec';
@@ -40,8 +41,7 @@ function getWorker() {
 }
 export function precisionSourceInfo(src: string) {
   if (!src.startsWith('data:image/png')) return { depth: 8, hdr: false };
-  const binary = atob(src.slice(src.indexOf(',') + 1));
-  return pngInfo(Uint8Array.from(binary, (c) => c.charCodeAt(0)));
+  return pngInfo(dataURLBytes(src));
 }
 function executePrecision(
   src: string,
