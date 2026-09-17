@@ -62,7 +62,7 @@ try {
   await idle();
   const before = await pixels();
   await page.getByRole('button', { name: '◉ 마스크', exact: true }).click();
-  await page.getByRole('button', { name: '원형 추가', exact: true }).click();
+  await page.getByRole('button', { name: '원형 마스크', exact: true }).click();
   const box = await page.getByLabel('마스크 그리기 영역').boundingBox();
   await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.5);
   await page.mouse.down();
@@ -103,7 +103,8 @@ try {
   await idle();
   assert.deepEqual(await pixels(), edited);
   await page.getByRole('button', { name: '◉ 마스크', exact: true }).click();
-  await page.getByRole('button', { name: '브러시 추가', exact: true }).click();
+  await page.getByRole('button', { name: '새 마스크 만들기', exact: true }).click();
+  await page.getByRole('button', { name: '브러시 마스크', exact: true }).click();
   await page.getByLabel('로컬 노출', { exact: true }).fill('-0.5');
   await page.getByLabel('로컬 노출', { exact: true }).press('ArrowRight');
   const brush = await page.getByLabel('마스크 그리기 영역').boundingBox();

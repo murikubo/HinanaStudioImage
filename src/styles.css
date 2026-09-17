@@ -1782,10 +1782,42 @@ input[type='range']:disabled {
   margin-left: 8px;
 }
 
-.subject-tools {
-  justify-content: flex-start;
-  margin-top: 12px;
+.subject-tools,
+.mask-create {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
 }
+.subject-tools button {
+  min-width: 0;
+  word-break: keep-all;
+}
+.subject-tools button[aria-pressed='true'] {
+  border-color: #cddcba;
+  color: #cddcba;
+  background: #343e30;
+}
+.mask-new {
+  border-bottom: 1px solid #353d38;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+}
+.mask-new-toggle {
+  width: 100%;
+  text-align: left;
+}
+.mask-edit-title {
+  font-size: 12px;
+  color: #cddcba;
+  padding: 0 0 14px;
+}
+.mask-panel .mask-tool-instruction {
+  color: #cddcba;
+}
+.subject-help .mask-actions {
+  margin-top: 10px;
+}
+
 .subject-help {
   margin: 12px 0;
   font-size: 11px;

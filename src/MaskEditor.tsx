@@ -43,6 +43,7 @@ export function MaskPanel({
   onExclude,
   onChange,
 }: Props) {
+  const [createOpen, setCreateOpen] = useState(masks.length === 0);
   const mask = masks.find((m) => m.id === selected) || masks[0];
   const update = (values: Partial<LocalMask>, commit = false) =>
     mask &&
@@ -53,38 +54,52 @@ export function MaskPanel({
   return (
     <section className="mask-panel" aria-label="로컬 마스킹">
       <h3>선택한 영역만 보정</h3>
-      <p>
-        피사체는 클릭으로, 브러시·그라디언트는 드래그로 선택하세요. 선택 후 아래 로컬 보정 값을
-        조절해야 사진이 바뀝니다.
-      </p>
-      <div className="mask-create">
-        {(['subject', 'brush', 'linear', 'radial'] as const).map((kind) => (
-          <button
-            key={kind}
-            disabled={
-              disabled || masks.length >= MAX_MASKS || (kind === 'subject' && !window.hinana)
-            }
-            onClick={() => {
-              const m = newMask(kind, crypto.randomUUID());
-              m.name += ` ${masks.length + 1}`;
-              if (kind === 'linear' || kind === 'radial')
-                m.points = [
-                  { x: 0.5, y: 0.5 },
-                  { x: 0.8, y: 0.8 },
-                ];
-              onChange([...masks, m], true);
-              onSelect(m.id);
-            }}
-          >
-            {kind === 'subject'
-              ? '피사체 선택'
-              : kind === 'brush'
-                ? '브러시 추가'
-                : kind === 'linear'
-                  ? '선형 추가'
-                  : '원형 추가'}
-          </button>
-        ))}
+      <p>마스크로 영역을 정한 뒤 로컬 보정 값을 조절하세요.</p>
+      <div className="mask-new">
+        <button
+          className="mask-new-toggle"
+          aria-expanded={createOpen}
+          onClick={() => setCreateOpen(!createOpen)}
+        >
+          새 마스크 만들기
+        </button>
+        {createOpen && (
+          <>
+            <p>
+              별도의 보정 영역을 만듭니다. 기존 피사체를 다듬으려면 아래 수정 도구를 사용하세요.
+            </p>
+            <div className="mask-create">
+              {(['subject', 'brush', 'linear', 'radial'] as const).map((kind) => (
+                <button
+                  key={kind}
+                  disabled={
+                    disabled || masks.length >= MAX_MASKS || (kind === 'subject' && !window.hinana)
+                  }
+                  onClick={() => {
+                    const m = newMask(kind, crypto.randomUUID());
+                    m.name += ` ${masks.length + 1}`;
+                    if (kind === 'linear' || kind === 'radial')
+                      m.points = [
+                        { x: 0.5, y: 0.5 },
+                        { x: 0.8, y: 0.8 },
+                      ];
+                    onChange([...masks, m], true);
+                    onSelect(m.id);
+                    setCreateOpen(false);
+                  }}
+                >
+                  {kind === 'subject'
+                    ? '피사체 마스크'
+                    : kind === 'brush'
+                      ? '브러시 마스크'
+                      : kind === 'linear'
+                        ? '선형 마스크'
+                        : '원형 마스크'}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
       {subjectBusy && (
         <div role="status" className="subject-status">
@@ -106,6 +121,7 @@ export function MaskPanel({
       </div>
       {mask && (
         <fieldset disabled={disabled}>
+          <legend className="mask-edit-title">{mask.name} 수정</legend>
           <div className="mask-actions">
             <label>
               <input
@@ -144,45 +160,26 @@ export function MaskPanel({
           </label>
           {mask.kind === 'subject' && (
             <>
-              <p>
-                {mask.points.length
-                  ? `선택점 ${mask.points.length}/32 · 추가 또는 제외할 곳을 클릭하세요.`
-                  : '사진에서 선택할 피사체를 클릭하세요. 첫 인식은 시간이 걸릴 수 있습니다.'}
-              </p>
-              <div className="mask-actions">
+              <p className="mask-tool-note">아래 도구는 현재 마스크 하나의 영역을 수정합니다.</p>
+              <div className="subject-tools" role="group" aria-label="현재 피사체 마스크 수정 도구">
                 <button
                   aria-pressed={subjectTool === 'ai' && !exclude}
                   onClick={() => {
-                    onExclude(false);
                     onSubjectTool('ai');
+                    onExclude(false);
                   }}
                 >
-                  선택에 추가
+                  AI로 포함
                 </button>
                 <button
+                  disabled={!mask.points.length}
                   aria-pressed={subjectTool === 'ai' && exclude}
-                  disabled={!mask.points.length}
                   onClick={() => {
+                    onSubjectTool('ai');
                     onExclude(true);
-                    onSubjectTool('ai');
                   }}
                 >
-                  선택에서 제외
-                </button>
-                <button
-                  disabled={!mask.points.length}
-                  onClick={() => {
-                    update({ points: [], raster: undefined, strokes: undefined }, true);
-                    onSubjectTool('ai');
-                    onExclude(false);
-                  }}
-                >
-                  선택 다시 시작
-                </button>
-              </div>
-              <div className="mask-actions subject-tools" aria-label="피사체 다듬기 도구">
-                <button aria-pressed={subjectTool === 'ai'} onClick={() => onSubjectTool('ai')}>
-                  AI 클릭
+                  AI로 제외
                 </button>
                 <button
                   disabled={!mask.raster}
@@ -205,30 +202,51 @@ export function MaskPanel({
                   브러시로 지우기
                 </button>
               </div>
-              {mask.raster && (
-                <>
-                  <p>드래그로 다듬기 · Alt/Option: 지우기 · Esc: 현재 획 취소</p>
-                  <p>
-                    수동 수정 {mask.strokes?.length || 0}/{MAX_REFINE_STROKES}획 ·{' '}
-                    {(mask.strokes || []).reduce((n, s) => n + s.points.length, 0)}/
-                    {MAX_REFINE_POINTS}점
-                  </p>
+              <p className="mask-tool-instruction">
+                {subjectTool === 'ai'
+                  ? exclude
+                    ? '제외할 부분을 클릭하세요. AI가 선택 영역을 다시 계산합니다.'
+                    : '포함할 피사체를 클릭하세요. AI가 선택 영역을 계산합니다.'
+                  : subjectTool === 'add'
+                    ? '사진 위를 드래그해 현재 선택 영역에 더하세요.'
+                    : '사진 위를 드래그해 현재 선택 영역에서 지우세요.'}
+              </p>
+              {subjectTool === 'ai' ? (
+                <p>AI 선택점 {mask.points.length}/32 · Alt/Option 클릭: 제외</p>
+              ) : (
+                <p>
+                  수동 수정 {mask.strokes?.length || 0}/{MAX_REFINE_STROKES}획 ·{' '}
+                  {(mask.strokes || []).reduce((n, s) => n + s.points.length, 0)}/
+                  {MAX_REFINE_POINTS}점 · Esc: 현재 획 취소
+                </p>
+              )}
+              <details className="subject-help">
+                <summary>수정 초기화 및 사용 안내</summary>
+                <div className="mask-actions">
                   <button
                     disabled={!mask.strokes?.length}
                     onClick={() => update({ strokes: undefined }, true)}
                   >
                     수동 수정 초기화
                   </button>
-                </>
-              )}
-              <details className="subject-help">
-                <summary>다듬기 사용 안내</summary>
+                  <button
+                    disabled={!mask.points.length}
+                    onClick={() => {
+                      update({ points: [], raster: undefined, strokes: undefined }, true);
+                      onSubjectTool('ai');
+                      onExclude(false);
+                    }}
+                  >
+                    선택 다시 시작
+                  </button>
+                </div>
                 <p>
-                  수동 수정은 반전 전 영역에 적용됩니다. AI를 다시 클릭해도 유지되며, 브러시
-                  크기·부드러움은 새로 그리는 획에만 적용됩니다.
+                  수동 수정 초기화는 브러시 획만 지웁니다. 선택 다시 시작은 AI 선택과 브러시 획을
+                  모두 비웁니다.
                 </p>
                 <p>
-                  Alt/Option 클릭으로 제외 · 최대 32점 · 로컬 AI 인식 결과는 부정확할 수 있습니다.
+                  수동 수정은 반전 전 영역에 적용되며 AI 재인식 후에도 유지됩니다. 브러시
+                  크기·부드러움은 새 획에 적용됩니다. Alt/Option을 누르고 그리면 지우기입니다.
                 </p>
               </details>
             </>
@@ -488,6 +506,7 @@ export function MaskOverlay({
         />
       )}
       {mask.kind === 'subject' &&
+        subjectTool === 'ai' &&
         show &&
         mask.points.map((p, i) => {
           const pos = maskToDisplay(p, geometry);

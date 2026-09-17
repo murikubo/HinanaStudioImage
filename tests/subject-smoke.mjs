@@ -64,7 +64,9 @@ try {
   await idle();
   const before = await sample();
   await page.getByRole('button', { name: '◉ 마스크', exact: true }).click();
-  await page.getByRole('button', { name: '피사체 선택', exact: true }).click();
+  if (!(await page.getByRole('button', { name: '피사체 마스크', exact: true }).count()))
+    await page.getByRole('button', { name: '새 마스크 만들기', exact: true }).click();
+  await page.getByRole('button', { name: '피사체 마스크', exact: true }).click();
   let box = await page.getByLabel('마스크 그리기 영역').boundingBox();
   const click = async (x, y) => {
     box = await page.getByLabel('마스크 그리기 영역').boundingBox();
@@ -108,7 +110,7 @@ try {
   const edited = await sample();
   assert.ok(edited.dog[0] > before.dog[0]);
   assert.deepEqual(edited.grass, before.grass);
-  await page.getByRole('button', { name: '선택에서 제외', exact: true }).click();
+  await page.getByRole('button', { name: 'AI로 제외', exact: true }).click();
   const next = Date.now();
   await click(0.43, 0.51);
   console.log('Refinement ms:', Date.now() - next);
@@ -122,6 +124,11 @@ try {
   await idle();
   const aiOnly = await sample();
   await page.getByRole('button', { name: '브러시로 더하기', exact: true }).click();
+  assert.equal(await page.locator('.subject-tools [aria-pressed="true"]').count(), 1);
+  assert.equal(await page.locator('.mask-list button').count(), 1);
+  assert.equal(await page.getByRole('button', { name: '브러시 마스크', exact: true }).count(), 0);
+  assert.equal(await page.locator('.mask-overlay circle').count(), 0);
+
   await page.getByLabel('브러시 반경', { exact: true }).fill('0.05');
   await page.getByLabel('브러시 반경', { exact: true }).press('ArrowRight');
   await page.getByLabel('브러시 경계 부드러움', { exact: true }).fill('0');
@@ -156,13 +163,14 @@ try {
   assert.equal(manualMask.strokes.length, 2);
   assert.equal(manualMask.strokes[0].erase, false);
   assert.equal(manualMask.strokes[1].erase, true);
+  await page.locator('.subject-help summary').click();
   await page.getByRole('button', { name: '수동 수정 초기화', exact: true }).click();
   await idle();
   assert.deepEqual(await sample(), aiOnly);
   await page.getByTitle('실행 취소 (⌘/Ctrl Z)').click();
   await idle();
   assert.deepEqual(await sample(), erased);
-  await page.getByRole('button', { name: '선택에 추가', exact: true }).click();
+  await page.getByRole('button', { name: 'AI로 포함', exact: true }).click();
   await click(0.48, 0.62);
   project = await save();
   assert.deepEqual(project.photos[0].adjustments.masks[0].strokes, manualMask.strokes);
@@ -170,6 +178,10 @@ try {
   assert.equal(project.photos[0].adjustments.masks[0].points.length, 3);
   assert.equal(project.photos[0].adjustments.masks[0].points[2].exclude, false);
   const finalPixels = await sample();
+  await page.locator('.subject-help summary').click();
+  await page.locator('.adjust-scroll').evaluate((el) => {
+    el.scrollTop = 0;
+  });
   await page.screenshot({ path: 'docs/subject-mask.png' });
   await page.waitForFunction(() =>
     document.querySelector('.save-status')?.textContent.includes('이 기기에 저장됨'),
@@ -223,7 +235,9 @@ try {
   // Reimport actual 16-bit PQ output: inference uses an SDR proxy, editing stays HDR/float.
   await page.locator('input[multiple]').setInputFiles(path.join(root, exportName));
   await idle();
-  await page.getByRole('button', { name: '피사체 선택', exact: true }).click();
+  if (!(await page.getByRole('button', { name: '피사체 마스크', exact: true }).count()))
+    await page.getByRole('button', { name: '새 마스크 만들기', exact: true }).click();
+  await page.getByRole('button', { name: '피사체 마스크', exact: true }).click();
   await click(0.64, 0.6);
   const hdrProject = await save();
   const hdrPhoto = hdrProject.photos.find((p) => p.id === hdrProject.selected);

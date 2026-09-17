@@ -4,7 +4,7 @@
 
 ## 바로 실행
 
-Windows x64에서는 `release/Hinana-Studio-Image-0.11.0-Windows-x64-Setup.exe`로 설치합니다. 설치 위치를 선택할 수 있고, 시작 메뉴/바탕화면 바로가기를 만듭니다.
+Windows x64에서는 `release/Hinana-Studio-Image-0.11.1-Windows-x64-Setup.exe`로 설치합니다. 설치 위치를 선택할 수 있고, 시작 메뉴/바탕화면 바로가기를 만듭니다.
 
 macOS Apple Silicon용 빌드가 있으면 `release/mac-arm64/Hinana Studio Image.app`을 실행합니다.
 
@@ -29,6 +29,12 @@ npm run dev:web
 ```
 
 Electron 실행 파일이 없다는 오류가 나면 `node node_modules/electron/install.js`를 한 번 실행하세요. 개발 서버 기본 포트는 5173입니다.
+
+## v0.11.1 마스크 도구 구분
+
+- **새 마스크 만들기** 안의 피사체·브러시·선형·원형 버튼은 별도의 보정 영역을 만듭니다. 마스크를 만들면 이 메뉴가 접힙니다.
+- 선택한 피사체 마스크의 **AI로 포함 / AI로 제외 / 브러시로 더하기 / 브러시로 지우기**는 기존 영역 하나를 수정합니다. 한 도구만 활성화되고 안내 문구도 함께 바뀝니다. 브러시 모드에서는 AI 선택점 표시를 숨깁니다.
+- 초기화 버튼과 자세한 설명은 **수정 초기화 및 사용 안내**에서 확인합니다.
 
 ## v0.11.0 AI 선택 영역 직접 다듬기
 
