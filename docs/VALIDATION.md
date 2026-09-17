@@ -139,3 +139,5 @@ macOS v0.8.0 패키지에서도 HDR 전용 테스트와 전체 UI 통합 테스�
 - macOS 패키지의 기존 로컬 마스크 및 HDR 테스트도 통과했습니다. Windows CI는 동일한 고정 모델과 사진으로 패키징된 EXE를 테스트합니다.
 - 선택 지도는 최대 1024px, 이미지 보정은 기존 8비트/float 경로를 사용합니다. 머리카락/반투명 경계의 정밀 분리, 전경 자동 선택, GPU 가속은 이번 범위에 포함하지 않습니다.
 - 테스트 사진 출처: [Transformers.js 문서의 코기 예제](https://huggingface.co/datasets/Xenova/transformers.js-docs/blob/fbe92bd97d48f3ec17779d8d8f2964e1c6bc7634/corgi.jpg). 테스트 다운로드 스크립트에서 revision과 SHA-256을 고정합니다.
+
+최종 코드 `b4df156`의 [Windows CI](https://github.com/murikubo/HinanaStudioImage/actions/runs/35187867728)가 전체 성공했습니다. 단위 43개, NSIS 설치 파일 생성, 실제 EXE의 기존 UI/P3/HDR/로컬 마스크/RAW 테스트와 새 피사체 선택 테스트를 모두 통과했습니다. 새 테스트는 실제 PQ cICP 출력과 그 파일의 HDR 재입력 후 피사체 인식까지 확인합니다. macOS 최종 패키지에서도 동일한 피사체 테스트가 통과했습니다. 프로젝트 내보내기에서는 재열기 시 사용하지 않는 실행 취소 이력을 비워 선택 지도 중복 저장을 방지하며, 자동 저장의 실행 취소 이력은 유지합니다. Windows 런타임 전제 조건은 README에 기록했습니다.
