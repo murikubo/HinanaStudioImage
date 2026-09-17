@@ -1,3 +1,4 @@
+import { registerSubjectSelector } from './subject';
 import { registerRawDecoder } from './raw';
 import { app, BrowserWindow, Menu, shell, nativeTheme } from 'electron';
 import path from 'node:path';
@@ -38,6 +39,7 @@ function createWindow() {
 app.whenReady().then(() => {
   nativeTheme.themeSource = 'dark';
   registerRawDecoder();
+  registerSubjectSelector();
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       ...(process.platform === 'darwin'

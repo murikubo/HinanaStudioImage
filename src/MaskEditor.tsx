@@ -5,6 +5,7 @@ import {
   newMask,
   maskCoverage,
   maskToSource,
+  maskToDisplay,
   type LocalMask,
   type MaskGeometry,
   type MaskPoint,
@@ -16,6 +17,10 @@ type Props = {
   showOverlay: boolean;
   onOverlay: (show: boolean) => void;
   disabled: boolean;
+  subjectBusy: boolean;
+  onCancelSubject: () => void;
+  exclude: boolean;
+  onExclude: (exclude: boolean) => void;
   onChange: (masks: LocalMask[], commit: boolean) => void;
 };
 export function MaskPanel({
@@ -25,6 +30,10 @@ export function MaskPanel({
   showOverlay,
   onOverlay,
   disabled,
+  subjectBusy,
+  onCancelSubject,
+  exclude,
+  onExclude,
   onChange,
 }: Props) {
   const mask = masks.find((m) => m.id === selected) || masks[0];
@@ -38,17 +47,20 @@ export function MaskPanel({
     <section className="mask-panel" aria-label="로컬 마스킹">
       <h3>선택한 영역만 보정</h3>
       <p>
-        마스크를 추가하고 사진 위를 드래그하세요. 영역은 자르기·회전 후에도 원본 위치를 따라갑니다.
+        피사체는 클릭으로, 브러시·그라디언트는 드래그로 선택하세요. 선택 후 아래 로컬 보정 값을
+        조절해야 사진이 바뀝니다.
       </p>
       <div className="mask-create">
-        {(['brush', 'linear', 'radial'] as const).map((kind) => (
+        {(['subject', 'brush', 'linear', 'radial'] as const).map((kind) => (
           <button
             key={kind}
-            disabled={disabled || masks.length >= MAX_MASKS}
+            disabled={
+              disabled || masks.length >= MAX_MASKS || (kind === 'subject' && !window.hinana)
+            }
             onClick={() => {
               const m = newMask(kind, crypto.randomUUID());
               m.name += ` ${masks.length + 1}`;
-              if (kind !== 'brush')
+              if (kind === 'linear' || kind === 'radial')
                 m.points = [
                   { x: 0.5, y: 0.5 },
                   { x: 0.8, y: 0.8 },
@@ -57,10 +69,21 @@ export function MaskPanel({
               onSelect(m.id);
             }}
           >
-            {kind === 'brush' ? '브러시 추가' : kind === 'linear' ? '선형 추가' : '원형 추가'}
+            {kind === 'subject'
+              ? '피사체 선택'
+              : kind === 'brush'
+                ? '브러시 추가'
+                : kind === 'linear'
+                  ? '선형 추가'
+                  : '원형 추가'}
           </button>
         ))}
       </div>
+      {subjectBusy && (
+        <div role="status" className="subject-status">
+          피사체 인식 중… <button onClick={onCancelSubject}>인식 취소</button>
+        </div>
+      )}
       <div className="mask-list">
         {masks.map((m) => (
           <button
@@ -112,6 +135,39 @@ export function MaskPanel({
             />
             선택 영역 반전
           </label>
+          {mask.kind === 'subject' && (
+            <>
+              <p>
+                {mask.points.length
+                  ? `선택점 ${mask.points.length}/32 · 추가 또는 제외할 곳을 클릭하세요.`
+                  : '사진에서 선택할 피사체를 클릭하세요. 첫 인식은 시간이 걸릴 수 있습니다.'}
+              </p>
+              <div className="mask-actions">
+                <button aria-pressed={!exclude} onClick={() => onExclude(false)}>
+                  선택에 추가
+                </button>
+                <button
+                  aria-pressed={exclude}
+                  disabled={!mask.points.length}
+                  onClick={() => onExclude(true)}
+                >
+                  선택에서 제외
+                </button>
+                <button
+                  disabled={!mask.points.length}
+                  onClick={() => {
+                    update({ points: [], raster: undefined }, true);
+                    onExclude(false);
+                  }}
+                >
+                  선택 다시 시작
+                </button>
+              </div>
+              <p>
+                Alt/Option 클릭으로 제외 · 최대 32점 · 로컬 AI 인식 결과는 부정확할 수 있습니다.
+              </p>
+            </>
+          )}
           {mask.kind === 'brush' && (
             <>
               <p>
@@ -125,7 +181,9 @@ export function MaskPanel({
           {(
             [
               { key: 'opacity', label: '마스크 강도', min: 0, max: 1, step: 0.01 },
-              { key: 'feather', label: '경계 부드러움', min: 0, max: 1, step: 0.01 },
+              ...(mask.kind === 'subject'
+                ? []
+                : [{ key: 'feather', label: '경계 부드러움', min: 0, max: 1, step: 0.01 }]),
               ...(mask.kind === 'brush'
                 ? [{ key: 'radius', label: '브러시 반경', min: 0.005, max: 0.5, step: 0.005 }]
                 : []),
@@ -166,11 +224,15 @@ export function MaskOverlay({
   geometry,
   show,
   onChange,
+  onSubjectPoint,
+  disabled = false,
 }: {
   mask?: LocalMask;
   geometry: MaskGeometry;
   show: boolean;
   onChange: (mask: LocalMask) => void;
+  onSubjectPoint: (mask: LocalMask, point: MaskPoint) => void;
+  disabled?: boolean;
 }) {
   const [draft, setDraft] = useState<LocalMask | null>(null),
     [preview, setPreview] = useState('');
@@ -250,7 +312,12 @@ export function MaskOverlay({
       viewBox="0 0 1 1"
       preserveAspectRatio="none"
       onPointerDown={(e) => {
-        if (e.button !== 0 || !mask.enabled) return;
+        if (e.button !== 0 || !mask.enabled || disabled) return;
+        if (mask.kind === 'subject') {
+          e.preventDefault();
+          onSubjectPoint(mask, { ...point(e), exclude: e.altKey });
+          return;
+        }
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
         const p = point(e);
@@ -287,6 +354,23 @@ export function MaskOverlay({
       }}
     >
       {preview && <image href={preview} width="1" height="1" preserveAspectRatio="none" />}
+      {mask.kind === 'subject' &&
+        show &&
+        mask.points.map((p, i) => {
+          const pos = maskToDisplay(p, geometry);
+          return (
+            <svg key={i} x={pos.x} y={pos.y} width=".025" height=".04" overflow="visible">
+              <circle
+                r=".006"
+                cx="0"
+                cy="0"
+                fill={p.exclude ? '#ff5270' : '#b7e794'}
+                stroke="white"
+                strokeWidth=".002"
+              />
+            </svg>
+          );
+        })}
     </svg>
   );
 }

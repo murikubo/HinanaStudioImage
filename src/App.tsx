@@ -1,3 +1,5 @@
+import { selectSubject } from './subject-client';
+import type { LocalMask, MaskPoint } from './local-masks';
 import { MaskPanel, MaskOverlay } from './MaskEditor';
 import {
   requestPrecision,
@@ -183,6 +185,24 @@ function App() {
   const [proofSDR, setProofSDR] = useState(false);
   const [maskId, setMaskId] = useState('');
   const [maskOverlay, setMaskOverlay] = useState(true);
+  const [subjectBusy, setSubjectBusy] = useState(false);
+  const [subjectExclude, setSubjectExclude] = useState(false);
+  const subjectJob = useRef<AbortController | null>(null);
+  function cancelSubject() {
+    subjectJob.current?.abort();
+    subjectJob.current = null;
+    setSubjectBusy(false);
+  }
+  useEffect(() => {
+    cancelSubject();
+    setSubjectExclude(false);
+  }, [selected, maskId, tab]);
+  useEffect(
+    () => () => {
+      subjectJob.current?.abort();
+    },
+    [],
+  );
   const [hdrDisplay, setHdrDisplay] = useState(() => matchMedia('(dynamic-range: high)').matches);
   useEffect(() => {
     const q = matchMedia('(dynamic-range: high)');
@@ -250,7 +270,7 @@ function App() {
     let obsolete = false;
     setSaveStatus('저장 중…');
     const timer = setTimeout(() => {
-      saveWorkspace({ version: 3, photos, selected })
+      saveWorkspace({ version: 4, photos, selected })
         .then(() => {
           if (!obsolete) {
             setSavedSnapshot({ photos, selected });
@@ -355,7 +375,52 @@ function App() {
       }),
     );
   }
+  async function recognizeSubject(mask: LocalMask, point: MaskPoint) {
+    if (!active || subjectJob.current) return;
+    if (mask.points.length >= 32) {
+      notify('선택점은 32개까지 지원합니다. 선택을 다시 시작해 주세요.');
+      return;
+    }
+    const exclude = mask.points.length > 0 && (subjectExclude || !!point.exclude);
+    const points = [...mask.points, { ...point, exclude }];
+    const controller = new AbortController();
+    subjectJob.current = controller;
+    setSubjectBusy(true);
+    const photoId = active.id,
+      source = active.src;
+    try {
+      const raster = await selectSubject(source, points, controller.signal);
+      if (controller.signal.aborted) return;
+      setPhotos((current) =>
+        current.map((p) => {
+          if (
+            p.id !== photoId ||
+            p.src !== source ||
+            p.adjustments.masks.find((m) => m.id === mask.id) !== mask
+          )
+            return p;
+          const next = {
+            ...p.adjustments,
+            masks: p.adjustments.masks.map((m) =>
+              m.id === mask.id ? { ...m, points, raster } : m,
+            ),
+          };
+          const history = [...p.history.slice(0, p.cursor + 1), next].slice(-60);
+          return { ...p, adjustments: next, history, cursor: history.length - 1 };
+        }),
+      );
+      setMaskOverlay(true);
+    } catch (error) {
+      if (!controller.signal.aborted) notify((error as Error).message);
+    } finally {
+      if (subjectJob.current === controller) {
+        subjectJob.current = null;
+        setSubjectBusy(false);
+      }
+    }
+  }
   function undo(direction: number) {
+    cancelSubject();
     setPhotos((current) =>
       current.map((p) => {
         if (p.id !== selected) return p;
@@ -503,7 +568,7 @@ function App() {
     setBusy('프로젝트 저장 중');
     try {
       download(
-        new Blob([JSON.stringify({ version: 3, photos, selected })], { type: 'application/json' }),
+        new Blob([JSON.stringify({ version: 4, photos, selected })], { type: 'application/json' }),
         'Hinana-Workspace.hinanaimage',
       );
       notify('원본과 보정값을 포함한 프로젝트를 저장했습니다.');
@@ -1035,6 +1100,8 @@ function App() {
                     key={selected}
                     mask={a.masks.find((m) => m.id === maskId) || a.masks[0]}
                     show={maskOverlay}
+                    disabled={subjectBusy}
+                    onSubjectPoint={recognizeSubject}
                     geometry={{
                       width: active.width,
                       height: active.height,
@@ -1289,7 +1356,7 @@ function App() {
                 <select
                   aria-label="편집 정밀도"
                   value={a.precision}
-                  disabled={!active || compare || !!busy}
+                  disabled={!active || compare || !!busy || subjectBusy}
                   onChange={(e) =>
                     change(
                       {
@@ -1364,7 +1431,7 @@ function App() {
                 <select
                   aria-label="작업 색공간"
                   value={a.colorSpace}
-                  disabled={!active || compare || !!busy}
+                  disabled={!active || compare || !!busy || subjectBusy}
                   onChange={(e) => {
                     setProofSRGB(false);
                     change({ colorSpace: e.target.value as WorkingColorSpace }, true);
@@ -1471,7 +1538,11 @@ function App() {
               onSelect={setMaskId}
               showOverlay={maskOverlay}
               onOverlay={setMaskOverlay}
-              disabled={!active || compare || !!busy}
+              disabled={!active || compare || !!busy || subjectBusy}
+              subjectBusy={subjectBusy}
+              onCancelSubject={cancelSubject}
+              exclude={subjectExclude}
+              onExclude={setSubjectExclude}
               onChange={(masks, commit) => change({ masks }, commit)}
             />
           ) : tab === 'edit' ? (

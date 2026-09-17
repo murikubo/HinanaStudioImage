@@ -1762,3 +1762,22 @@ input[type='range']:disabled {
   touch-action: none;
   cursor: crosshair;
 }
+
+.mask-actions {
+  flex-wrap: wrap;
+}
+.mask-actions button {
+  white-space: nowrap;
+}
+.mask-actions button[aria-pressed='true'] {
+  border-color: #cddcba;
+  color: #cddcba;
+}
+.subject-status {
+  font-size: 12px;
+  margin-bottom: 12px;
+  color: #cddcba;
+}
+.subject-status button {
+  margin-left: 8px;
+}

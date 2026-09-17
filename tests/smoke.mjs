@@ -50,7 +50,7 @@ try {
   );
   await page.getByRole('button', { name: '프로그램 정보', exact: true }).click();
   await page.getByRole('dialog').getByText('비나래', { exact: true }).waitFor();
-  await page.getByRole('dialog').getByText('Ver. 0.9.0', { exact: true }).waitFor();
+  await page.getByRole('dialog').getByText('Ver. 0.10.0', { exact: true }).waitFor();
   assert.ok(
     await page.locator('.about-icon').evaluate((img) => img.complete && img.naturalWidth > 1000),
   );

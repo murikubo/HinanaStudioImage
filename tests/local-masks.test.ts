@@ -154,3 +154,46 @@ test('float rendering applies masks after geometry and retains over-white local 
   assert.equal(frame.data[index + 3], 1);
   assert.ok(data.every((v) => v === 1));
 });
+
+test('subject raster survives serialization, transforms, inverse and linear HDR composition', () => {
+  const m = {
+    ...newMask('subject', 'subject'),
+    points: [{ x: 0.25, y: 0.5, exclude: false }],
+    raster: { width: 2, height: 2, data: Buffer.from([255, 0, 255, 0]).toString('base64') },
+    exposure: 1,
+  };
+  const saved = validateMasks(JSON.parse(JSON.stringify([m])))[0];
+  const g = { ...geometry, width: 2, height: 2, cropWidth: 2, cropHeight: 2 };
+  assert.deepEqual([...maskCoverage(saved, 2, 2, g)], [1, 0, 1, 0]);
+  assert.deepEqual([...maskCoverage(saved, 2, 2, { ...g, flip: true })], [0, 1, 0, 1]);
+  assert.deepEqual([...maskCoverage(saved, 2, 2, { ...g, rotation: 90 })], [1, 1, 0, 0]);
+  assert.deepEqual(
+    [...maskCoverage({ ...saved, inverted: true, opacity: 0.5 }, 2, 2, g)],
+    [0, 0.5, 0, 0.5],
+  );
+  const pixels = new Float32Array([2, 1, 0.5, 1, 2, 1, 0.5, 1, 2, 1, 0.5, 1, 2, 1, 0.5, 1]);
+  applyLocalMasks(pixels, 2, 2, [saved], g, 'display-p3', true);
+  assert.equal(pixels[0], 4);
+  assert.equal(pixels[4], 2);
+  assert.equal(pixels[3], 1);
+  assert.deepEqual(
+    [...maskCoverage({ ...newMask('subject', 'empty'), inverted: true }, 2, 2, g)],
+    [0, 0, 0, 0],
+  );
+});
+test('subject validation rejects malformed rasters and invalid prompts before rendering', () => {
+  const m = {
+    ...newMask('subject', 's'),
+    points: [{ x: 0.5, y: 0.5, exclude: false }],
+    raster: { width: 1, height: 1, data: '/w==' },
+  };
+  for (const patch of [
+    { raster: { width: 1025, height: 1, data: '' } },
+    { raster: { width: 1, height: 1, data: 'AAAA' } },
+    { raster: { width: 1, height: 1, data: '!!!!' } },
+    { raster: undefined },
+    { points: [{ x: 0.5, y: 0.5, exclude: true }] },
+    { points: Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, exclude: false })) },
+  ])
+    assert.throws(() => validateMasks([{ ...m, ...patch }]));
+});

@@ -36,6 +36,12 @@ jobs:
         run: node tests/masks-smoke.mjs
         env:
           HINANA_TEST_APP: ${{ github.workspace }}\release\win-unpacked\Hinana Studio Image.exe
+      - name: Download pinned subject fixture
+        run: node scripts/fetch-subject-fixture.mjs "${{ runner.temp }}\hinana-subject.jpg"
+      - name: Test offline subject selection and refinement
+        run: node tests/subject-smoke.mjs "${{ runner.temp }}\hinana-subject.jpg"
+        env:
+          HINANA_TEST_APP: ${{ github.workspace }}\release\win-unpacked\Hinana Studio Image.exe
       - name: Check Windows title bar layout
         run: node tests/window-layout.mjs
         env:

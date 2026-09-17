@@ -23,3 +23,16 @@ High-precision PNG codec: fast-png 8.0.0 (MIT), https://github.com/image-js/fast
 Compression: fflate (MIT), https://github.com/101arrowz/fflate.
 Binary buffers: iobuffer (MIT), https://github.com/image-js/iobuffer.
 Their license texts are included in dist/licenses.
+
+Subject segmentation: Xenova/slimsam-77-uniform (Apache-2.0), quantized ONNX
+conversion of nielsr/slimsam-77-uniform, based on SlimSAM and Segment Anything.
+https://huggingface.co/Xenova/slimsam-77-uniform
+https://github.com/czg1225/SlimSAM
+https://github.com/facebookresearch/segment-anything
+Pinned model revision: 5850ab45f587c112167512ffef949107115e26a0.
+Unmodified encoder and prompt decoder are included; SHA-256 hashes are recorded
+in scripts/fetch-subject-model.mjs. Apache-2.0 license accompanies the application.
+
+Inference runtime: ONNX Runtime 1.30.0 (MIT),
+https://github.com/microsoft/onnxruntime. Its license and third-party notices
+are included with the bundled npm package and in dist/licenses.

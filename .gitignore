@@ -13,3 +13,5 @@ native/bin/
 .env
 .env.*
 !.env.example
+
+/models/

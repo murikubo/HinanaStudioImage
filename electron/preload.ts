@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 contextBridge.exposeInMainWorld('hinana', {
   platform: process.platform,
+  selectSubject(input: unknown) {
+    return ipcRenderer.invoke('subject:select', input);
+  },
+  cancelSubject() {
+    return ipcRenderer.invoke('subject:cancel');
+  },
   redevelopRaw(source: string, name: string) {
     return ipcRenderer.invoke('raw:redevelop', source, name);
   },

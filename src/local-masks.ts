@@ -1,9 +1,10 @@
 import { linear, encoded } from './precision-math.ts';
-export type MaskPoint = { x: number; y: number; start?: boolean };
+export type MaskPoint = { x: number; y: number; start?: boolean; exclude?: boolean };
 export type LocalMask = {
   id: string;
   name: string;
-  kind: 'brush' | 'linear' | 'radial';
+  kind: 'brush' | 'linear' | 'radial' | 'subject';
+  raster?: { width: number; height: number; data: string };
   points: MaskPoint[];
   radius: number;
   feather: number;
@@ -28,7 +29,14 @@ export const MAX_MASK_POINTS = 1024;
 export function newMask(kind: LocalMask['kind'], id: string): LocalMask {
   return {
     id,
-    name: kind === 'brush' ? '브러시' : kind === 'linear' ? '선형 그라디언트' : '원형 그라디언트',
+    name:
+      kind === 'subject'
+        ? '피사체'
+        : kind === 'brush'
+          ? '브러시'
+          : kind === 'linear'
+            ? '선형 그라디언트'
+            : '원형 그라디언트',
     kind,
     points: [],
     radius: 0.08,
@@ -82,7 +90,28 @@ export function maskCoverage(
     const v = maskToDisplay(p, g);
     return { x: v.x * width, y: v.y * height, start: p.start };
   });
-  if (mask.kind === 'brush') {
+  if (mask.kind === 'subject') {
+    if (!mask.raster) return result;
+    const raster = mask.raster,
+      bytes = decodeRaster(raster);
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++) {
+        const p = maskToSource({ x: (x + 0.5) / width, y: (y + 0.5) / height }, g);
+        const xx = Math.max(0, Math.min(raster.width - 1, p.x * raster.width - 0.5));
+        const yy = Math.max(0, Math.min(raster.height - 1, p.y * raster.height - 0.5));
+        const x0 = Math.floor(xx),
+          y0 = Math.floor(yy),
+          x1 = Math.min(raster.width - 1, x0 + 1),
+          y1 = Math.min(raster.height - 1, y0 + 1);
+        const fx = xx - x0,
+          fy = yy - y0;
+        result[y * width + x] =
+          ((bytes[y0 * raster.width + x0] * (1 - fx) + bytes[y0 * raster.width + x1] * fx) *
+            (1 - fy) +
+            (bytes[y1 * raster.width + x0] * (1 - fx) + bytes[y1 * raster.width + x1] * fx) * fy) /
+          255;
+      }
+  } else if (mask.kind === 'brush') {
     const radius = Math.max(0.5, (mask.radius * Math.min(g.width, g.height) * width) / g.cropWidth);
     for (let k = 0; k < points.length; k++) {
       const a = points[points[k].start ? k : Math.max(0, k - 1)],
@@ -182,15 +211,22 @@ export function validateMasks(value: unknown): LocalMask[] {
       ids.has(m.id) ||
       typeof m.name !== 'string' ||
       m.name.length > 80 ||
-      !['brush', 'linear', 'radial'].includes(m.kind) ||
+      !['brush', 'linear', 'radial', 'subject'].includes(m.kind) ||
       typeof m.enabled !== 'boolean' ||
       typeof m.inverted !== 'boolean' ||
       !Array.isArray(m.points) ||
       m.points.length > MAX_MASK_POINTS ||
-      (m.kind !== 'brush' && m.points.length !== 2)
+      (['linear', 'radial'].includes(m.kind) && m.points.length !== 2) ||
+      (m.kind === 'subject' && (m.points.length > 32 || m.points[0]?.exclude))
     )
       throw Error('마스크 데이터가 올바르지 않습니다.');
     ids.add(m.id);
+    if (m.kind === 'subject') {
+      if (m.points.some((p: MaskPoint) => typeof p?.exclude !== 'boolean'))
+        throw Error('피사체 선택 좌표가 올바르지 않습니다.');
+      if (m.raster) decodeRaster(m.raster);
+      if (m.points.length && !m.raster) throw Error('피사체 선택 영역이 없습니다.');
+    } else if (m.raster !== undefined) throw Error('마스크 종류가 올바르지 않습니다.');
     for (const p of m.points)
       if (
         !p ||
@@ -216,4 +252,30 @@ export function validateMasks(value: unknown): LocalMask[] {
         throw Error('마스크 보정 범위를 초과했습니다.');
   }
   return value;
+}
+
+const rasterCache = new WeakMap<object, Uint8Array>();
+export function decodeRaster(r: NonNullable<LocalMask['raster']>): Uint8Array {
+  if (
+    !r ||
+    typeof r !== 'object' ||
+    !Number.isInteger(r.width) ||
+    !Number.isInteger(r.height) ||
+    r.width < 1 ||
+    r.height < 1 ||
+    r.width > 1024 ||
+    r.height > 1024 ||
+    typeof r.data !== 'string' ||
+    r.data.length !== Math.ceil((r.width * r.height) / 3) * 4 ||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(r.data)
+  )
+    throw Error('피사체 선택 영역 데이터가 올바르지 않습니다.');
+  const cached = rasterCache.get(r);
+  if (cached) return cached;
+  const decoded = atob(r.data);
+  if (decoded.length !== r.width * r.height)
+    throw Error('피사체 선택 영역 크기가 올바르지 않습니다.');
+  const bytes = Uint8Array.from(decoded, (c) => c.charCodeAt(0));
+  rasterCache.set(r, bytes);
+  return bytes;
 }

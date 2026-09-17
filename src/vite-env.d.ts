@@ -2,6 +2,13 @@
 interface Window {
   hinana?: {
     platform: string;
+    selectSubject(input: {
+      rgba: Uint8ClampedArray;
+      width: number;
+      height: number;
+      points: { x: number; y: number; exclude: boolean }[];
+    }): Promise<{ width: number; height: number; data: string }>;
+    cancelSubject(): Promise<void>;
     redevelopRaw(source: string, name: string): Promise<{ src: string; original: string }>;
     decodeRaw(file: File): Promise<{ src: string; original: string }>;
     onMenuAction(
