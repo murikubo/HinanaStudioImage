@@ -61,6 +61,7 @@ try {
   assert.equal(project.photos.length, 1);
   assert.equal(project.photos[0].adjustments.colorSpace, 'display-p3');
   const workingPNG = Buffer.from(project.photos[0].src.split(',')[1], 'base64');
+  assert.equal(workingPNG[24], 16, 'RAW working PNG must preserve 16 bits');
   let icc;
   for (let at = 8; at < workingPNG.length;) {
     const size = workingPNG.readUInt32BE(at);
@@ -114,7 +115,7 @@ try {
   );
   await page.getByRole('button', { name: '편집', exact: true }).click();
   await page.getByLabel('작업 색공간', { exact: true }).selectOption('srgb');
-  await page.getByRole('button', { name: 'RAW 원본에서 P3 다시 현상', exact: true }).click();
+  await page.getByRole('button', { name: 'RAW 원본에서 16비트 P3 다시 현상', exact: true }).click();
   await page.waitForFunction(
     () => document.querySelector('select[aria-label="작업 색공간"]').value === 'display-p3',
     {},

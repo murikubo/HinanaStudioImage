@@ -1638,15 +1638,19 @@ input[type='range']:disabled {
   border-bottom: 1px solid #34383a;
   background: #c7d8b005;
 }
-.color-management > label:first-child {
-  display: flex;
+.color-management > label:not(.proof-option) {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  margin: 8px 0;
+  font-size: 11px;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   color: #cddcba;
 }
 .color-management select {
-  min-width: 105px;
+  min-width: 0;
+  width: 100%;
   padding: 6px;
   background: #191d1d;
   border: 1px solid #454c43;

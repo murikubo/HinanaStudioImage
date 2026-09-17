@@ -1,6 +1,6 @@
 {
   "name": "hinana-studio-image",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "license": "UNLICENSED",
   "author": "비나래",
@@ -80,6 +80,7 @@
   "dependencies": {
     "@colorhythm/libraw-wasm": "1.1.1",
     "exifr": "^7.1.3",
+    "fast-png": "8.0.0",
     "lucide-react": "1.25.0",
     "piexifjs": "1.0.6",
     "pngjs": "7.0.0",

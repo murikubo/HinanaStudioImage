@@ -18,3 +18,8 @@ Output sRGB ICC: Compact-ICC-Profiles by Clinton Ingram (CC0 1.0),
 https://github.com/saucecontrol/Compact-ICC-Profiles. The license and profile
 provenance are included in `dist/profiles/`. The Display P3 profile was generated
 by a P3 Canvas PNG export from Chromium/Skia in Electron 43.1.1.
+
+High-precision PNG codec: fast-png 8.0.0 (MIT), https://github.com/image-js/fast-png.
+Compression: fflate (MIT), https://github.com/101arrowz/fflate.
+Binary buffers: iobuffer (MIT), https://github.com/image-js/iobuffer.
+Their license texts are included in dist/licenses.

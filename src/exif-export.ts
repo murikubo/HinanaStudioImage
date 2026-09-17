@@ -66,7 +66,7 @@ export function normalizeExif(
   tiff: Uint8Array,
   width: number,
   height: number,
-  colorSpace: WorkingColorSpace = 'srgb',
+  colorSpace: WorkingColorSpace | 'rec2100-pq' = 'srgb',
 ): Uint8Array {
   bound(tiff, 0, 8);
   const endian = ascii(tiff, 0, 2);
@@ -104,7 +104,7 @@ export function normalizeExif(
   root.set(0x101, scalar(0x101, height));
   exif.set(0xa002, scalar(0xa002, width));
   exif.set(0xa003, scalar(0xa003, height));
-  exif.set(0xa001, scalar(0xa001, colorSpace === 'display-p3' ? 65535 : 1, 3));
+  exif.set(0xa001, scalar(0xa001, colorSpace === 'srgb' ? 1 : 65535, 3));
   // Source interoperability declarations may name sRGB/Adobe RGB after conversion.
   exif.delete(0xa005);
   root.delete(0x8773);
@@ -218,7 +218,7 @@ export async function preserveExif(
   original: string,
   width: number,
   height: number,
-  colorSpace: WorkingColorSpace = 'srgb',
+  colorSpace: WorkingColorSpace | 'rec2100-pq' = 'srgb',
 ): Promise<Blob> {
   const raw = atob(original.slice(original.indexOf(',') + 1));
   const source = Uint8Array.from(raw, (c) => c.charCodeAt(0));

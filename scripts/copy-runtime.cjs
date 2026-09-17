@@ -13,3 +13,6 @@ fs.copyFileSync(
   'node_modules/@colorhythm/libraw-wasm/LICENSE',
   'dist/licenses/libraw-wasm-MIT.txt',
 );
+
+for (const name of ['fast-png', 'fflate', 'iobuffer'])
+  fs.copyFileSync(`node_modules/${name}/LICENSE`, `dist/licenses/${name}-MIT.txt`);

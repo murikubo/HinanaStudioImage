@@ -1,3 +1,9 @@
+import {
+  requestPrecision,
+  paintFloat,
+  precisionSourceInfo,
+  hdrCanvasSupported,
+} from './precision-client';
 import { tagOutput } from './icc';
 import {
   colorSpaceName,
@@ -173,6 +179,14 @@ function App() {
     [helpOpen, setHelpOpen] = useState(false);
   const [p3Supported] = useState(supportsDisplayP3);
   const [proofSRGB, setProofSRGB] = useState(false);
+  const [proofSDR, setProofSDR] = useState(false);
+  const [hdrDisplay, setHdrDisplay] = useState(() => matchMedia('(dynamic-range: high)').matches);
+  useEffect(() => {
+    const q = matchMedia('(dynamic-range: high)');
+    const update = () => setHdrDisplay(q.matches);
+    q.addEventListener('change', update);
+    return () => q.removeEventListener('change', update);
+  }, []);
   const [exportColor, setExportColor] = useState<'working' | WorkingColorSpace>('working');
   const [wideDisplay, setWideDisplay] = useState(() => matchMedia('(color-gamut: p3)').matches);
   useEffect(() => {
@@ -199,6 +213,10 @@ function App() {
       : saveMessage;
   const active = photos.find((p) => p.id === selected),
     a = active?.adjustments || defaults;
+  useEffect(() => {
+    if (a.precision !== 'float' && (format === 'png16' || format === 'hdr-png')) setFormat('png');
+    else if (a.dynamicRange !== 'hdr' && format === 'hdr-png') setFormat('png16');
+  }, [a.precision, a.dynamicRange, format]);
   const visible = photos.filter(
     (p) => (filter === 'all' || p.rating > 0) && p.name.toLowerCase().includes(query.toLowerCase()),
   );
@@ -229,7 +247,7 @@ function App() {
     let obsolete = false;
     setSaveStatus('저장 중…');
     const timer = setTimeout(() => {
-      saveWorkspace({ version: 1, photos, selected })
+      saveWorkspace({ version: 2, photos, selected })
         .then(() => {
           if (!obsolete) {
             setSavedSnapshot({ photos, selected });
@@ -251,6 +269,8 @@ function App() {
   }, [photos, selected, ready, notify]);
   useEffect(() => {
     if (!active || view !== 'edit') return;
+    const controller = new AbortController();
+    canvas.current?.setAttribute('aria-busy', 'true');
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
@@ -264,11 +284,36 @@ function App() {
           ? {
               ...defaults,
               colorSpace: a.colorSpace,
+              precision: a.precision,
+              dynamicRange: a.dynamicRange,
+              hdrPeak: a.hdrPeak,
               rotation: a.rotation,
               flip: a.flip,
               crop: a.crop,
             }
           : a;
+        if (a.precision === 'float') {
+          const result = await requestPrecision(
+            active.src,
+            image,
+            settings,
+            zoom ? Infinity : 1600,
+            undefined,
+            undefined,
+            controller.signal,
+          );
+          if (cancelled || !canvas.current) return;
+          const pixels = paintFloat(
+            result.frame,
+            canvas.current,
+            proofSRGB ? 'srgb' : a.colorSpace,
+            a.dynamicRange === 'hdr' && hdrDisplay && !proofSDR && !proofSRGB,
+            a.hdrPeak,
+          );
+          setBins(histogram(pixels));
+          canvas.current.setAttribute('aria-busy', 'false');
+          return;
+        }
         const working =
           proofSRGB && a.colorSpace === 'display-p3'
             ? document.createElement('canvas')
@@ -281,15 +326,20 @@ function App() {
           working.width = working.height = 0;
         }
         setBins(histogram(pixels.data));
+        canvas.current.setAttribute('aria-busy', 'false');
       } catch (e) {
-        notify((e as Error).message);
+        if (!cancelled) {
+          canvas.current?.setAttribute('aria-busy', 'false');
+          notify((e as Error).message);
+        }
       }
     }, 16);
     return () => {
       cancelled = true;
+      controller.abort();
       clearTimeout(timer);
     };
-  }, [active, a, compare, view, zoom, proofSRGB, notify]);
+  }, [active, a, compare, view, zoom, proofSRGB, proofSDR, hdrDisplay, notify]);
   function change(values: Partial<Adjustments>, commit = false) {
     setPhotos((current) =>
       current.map((p) => {
@@ -355,6 +405,18 @@ function App() {
           } else src = await readDataURL(file);
           const image = await loadImage(src);
           if (image.naturalWidth * image.naturalHeight > 60_000_000) throw new Error();
+          const info = precisionSourceInfo(src);
+          const initial: Adjustments = {
+            ...defaults,
+            colorSpace: p3Supported ? 'display-p3' : 'srgb',
+            precision: image.naturalWidth * image.naturalHeight <= 32_000_000 ? 'float' : 'legacy',
+            dynamicRange: info.hdr ? 'hdr' : 'sdr',
+          };
+          if (info.depth === 16 || info.hdr) {
+            if (initial.precision !== 'float')
+              throw new Error('16비트/HDR 편집은 32MP 이하를 지원합니다.');
+            await requestPrecision(src, image, initial, 1);
+          }
           const photo: Photo = {
             id: crypto.randomUUID(),
             name: file.name,
@@ -364,8 +426,8 @@ function App() {
             rating: 0,
             metadata: await readMetadata(src),
             ...(rawSource ? { rawSource } : {}),
-            adjustments: { ...defaults, colorSpace: p3Supported ? 'display-p3' : 'srgb' },
-            history: [{ ...defaults, colorSpace: p3Supported ? 'display-p3' : 'srgb' }],
+            adjustments: initial,
+            history: [initial],
             cursor: 0,
           };
           imageCache.current.set(photo.id, image);
@@ -438,7 +500,7 @@ function App() {
     setBusy('프로젝트 저장 중');
     try {
       download(
-        new Blob([JSON.stringify({ version: 1, photos, selected })], { type: 'application/json' }),
+        new Blob([JSON.stringify({ version: 2, photos, selected })], { type: 'application/json' }),
         'Hinana-Workspace.hinanaimage',
       );
       notify('원본과 보정값을 포함한 프로젝트를 저장했습니다.');
@@ -458,6 +520,8 @@ function App() {
         const img = await loadImage(p.src);
         if (img.naturalWidth * img.naturalHeight > 60_000_000)
           throw new Error('60MP 이하의 사진만 지원합니다.');
+        if (p.adjustments.precision === 'float')
+          await requestPrecision(p.src, img, p.adjustments, 1);
         p.metadata = await readMetadata(p.src);
         p.width = img.naturalWidth;
         p.height = img.naturalHeight;
@@ -490,7 +554,12 @@ function App() {
       const result = await window.hinana.redevelopRaw(photo.rawSource!, photo.name);
       const image = await loadImage(result.src);
       const metadata = await readMetadata(result.src);
-      const next: Adjustments = { ...photo.adjustments, colorSpace: 'display-p3' };
+      const next: Adjustments = {
+        ...photo.adjustments,
+        colorSpace: 'display-p3',
+        precision: 'float',
+      };
+      await requestPrecision(result.src, image, next, 1);
       imageCache.current.set(photo.id, image);
       setPhotos((current) =>
         current.map((p) =>
@@ -524,32 +593,69 @@ function App() {
     try {
       const img = imageCache.current.get(active.id) || (await loadImage(active.src)),
         target = document.createElement('canvas');
-      renderPhoto(
-        img,
-        target,
-        active.adjustments,
-        exportSize === 'original' ? Infinity : Number(exportSize),
-      );
       const outputColor = exportColor === 'working' ? a.colorSpace : exportColor;
-      const encodedCanvas =
-        outputColor === a.colorSpace ? target : convertCanvas(target, outputColor);
-      const blob = await new Promise<Blob>((resolve, reject) =>
-        encodedCanvas.toBlob(
-          (b) => (b ? resolve(b) : reject(new Error('이미지 변환 실패'))),
-          `image/${format}`,
-          quality / 100,
-        ),
-      );
-      const tagged = await tagOutput(blob, outputColor, target.width, target.height);
+      const highOutput = format === 'png16' || format === 'hdr-png';
+      if (highOutput && a.precision !== 'float')
+        throw new Error('32비트 고정밀 편집으로 전환해 주세요.');
+      if (format === 'hdr-png' && a.dynamicRange !== 'hdr')
+        throw new Error('HDR 편집 모드로 전환해 주세요.');
+      let blob: Blob, width: number, height: number;
+      let encodedCanvas = target;
+      if (a.precision === 'float') {
+        const result = await requestPrecision(
+          active.src,
+          img,
+          a,
+          exportSize === 'original' ? Infinity : Number(exportSize),
+          highOutput ? (format as 'png16' | 'hdr-png') : undefined,
+          outputColor,
+        );
+        if (highOutput) {
+          blob = new Blob([result.png as Uint8Array<ArrayBuffer>], { type: 'image/png' });
+          width = result.width;
+          height = result.height;
+        } else {
+          paintFloat(result.frame, target, outputColor, false, a.hdrPeak);
+          width = target.width;
+          height = target.height;
+          blob = await new Promise<Blob>((resolve, reject) =>
+            target.toBlob(
+              (b) => (b ? resolve(b) : reject(new Error('이미지 변환 실패'))),
+              `image/${format}`,
+              quality / 100,
+            ),
+          );
+        }
+      } else {
+        renderPhoto(img, target, a, exportSize === 'original' ? Infinity : Number(exportSize));
+        encodedCanvas = outputColor === a.colorSpace ? target : convertCanvas(target, outputColor);
+        width = target.width;
+        height = target.height;
+        blob = await new Promise<Blob>((resolve, reject) =>
+          encodedCanvas.toBlob(
+            (b) => (b ? resolve(b) : reject(new Error('이미지 변환 실패'))),
+            `image/${format}`,
+            quality / 100,
+          ),
+        );
+      }
+      const tagged =
+        format === 'hdr-png' ? blob : await tagOutput(blob, outputColor, width, height);
       const exported = keepExif
-        ? await preserveExif(tagged, active.src, target.width, target.height, outputColor)
+        ? await preserveExif(
+            tagged,
+            active.src,
+            width,
+            height,
+            format === 'hdr-png' ? 'rec2100-pq' : outputColor,
+          )
         : tagged;
       download(
         exported,
-        `${active.name.replace(/\.[^.]+$/, '')}-edited.${format === 'jpeg' ? 'jpg' : format}`,
+        `${active.name.replace(/\.[^.]+$/, '')}-edited.${highOutput ? 'png' : format === 'jpeg' ? 'jpg' : format}`,
       );
       setExportOpen(false);
-      notify(`${target.width} × ${target.height} 이미지가 내보내졌습니다.`);
+      notify(`${width} × ${height} 이미지가 내보내졌습니다.`);
       target.width = target.height = encodedCanvas.width = encodedCanvas.height = 0;
     } catch (e) {
       notify(`내보내기 실패: ${(e as Error).message}`);
@@ -621,7 +727,11 @@ function App() {
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, [exportOpen, helpOpen, aboutOpen, busy]);
-  const changed = JSON.stringify(a) !== JSON.stringify(defaults);
+  const changed = (Object.keys(defaults) as (keyof Adjustments)[]).some(
+    (key) =>
+      !['colorSpace', 'precision', 'dynamicRange', 'hdrPeak'].includes(key) &&
+      a[key] !== defaults[key],
+  );
   const dimensions = active ? outputSize(active.width, active.height, a) : [0, 0];
   return (
     <div
@@ -777,6 +887,9 @@ function App() {
                   {
                     ...defaults,
                     colorSpace: a.colorSpace,
+                    precision: a.precision,
+                    dynamicRange: a.dynamicRange,
+                    hdrPeak: a.hdrPeak,
                     ...p.values,
                     skinSmooth: a.skinSmooth,
                     skinRedness: a.skinRedness,
@@ -909,7 +1022,7 @@ function App() {
                 style={zoom ? { width: `${(dimensions[0] * zoom) / 100}px`, flexShrink: 0 } : {}}
               >
                 <canvas
-                  key={`${selected}-${proofSRGB ? 'srgb' : a.colorSpace}`}
+                  key={`${selected}-${proofSRGB ? 'srgb' : a.colorSpace}-${a.precision}-${a.dynamicRange}-${proofSDR}-${hdrDisplay}`}
                   ref={canvas}
                   aria-label="보정 사진 미리보기"
                 />
@@ -1123,7 +1236,7 @@ function App() {
       <aside className="right-panel">
         <div className="histogram">
           <div className="section-caption">
-            히스토그램 <span>RGB</span>
+            히스토그램 <span>{a.dynamicRange === 'hdr' ? '미리보기 RGB · 0–255' : 'RGB'}</span>
           </div>
           <Hist bins={bins} />
           <div className="histogram-labels">
@@ -1146,6 +1259,81 @@ function App() {
         <div className="adjust-scroll" key={tab}>
           {tab !== 'info' && (
             <section className="color-management" aria-label="색상 관리">
+              <label>
+                편집 정밀도
+                <select
+                  aria-label="편집 정밀도"
+                  value={a.precision}
+                  disabled={!active || compare || !!busy}
+                  onChange={(e) =>
+                    change(
+                      {
+                        precision: e.target.value as 'legacy' | 'float',
+                        ...(e.target.value === 'legacy' ? { dynamicRange: 'sdr' as const } : {}),
+                      },
+                      true,
+                    )
+                  }
+                >
+                  <option value="legacy">기존 8비트</option>
+                  <option
+                    value="float"
+                    disabled={!!active && active.width * active.height > 32_000_000}
+                  >
+                    32비트 부동소수점
+                  </option>
+                </select>
+              </label>
+              <label>
+                밝기 범위
+                <select
+                  aria-label="밝기 범위"
+                  value={a.dynamicRange}
+                  disabled={!active || compare || !!busy || a.precision !== 'float'}
+                  onChange={(e) => change({ dynamicRange: e.target.value as 'sdr' | 'hdr' }, true)}
+                >
+                  <option value="sdr">SDR</option>
+                  <option value="hdr">HDR</option>
+                </select>
+              </label>
+              {a.dynamicRange === 'hdr' && (
+                <>
+                  <label>
+                    HDR 최대 밝기
+                    <select
+                      aria-label="HDR 최대 밝기"
+                      value={a.hdrPeak}
+                      disabled={compare || !!busy}
+                      onChange={(e) => change({ hdrPeak: Number(e.target.value) }, true)}
+                    >
+                      {[400, 1000, 2000, 4000].map((n) => (
+                        <option key={n} value={n}>
+                          {n} nit
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="proof-option">
+                    <input
+                      type="checkbox"
+                      checked={proofSDR}
+                      onChange={(e) => setProofSDR(e.target.checked)}
+                    />
+                    SDR 밝기 변환 미리보기
+                  </label>
+                  <p>
+                    {hdrDisplay && hdrCanvasSupported() && !proofSDR && !proofSRGB
+                      ? 'HDR 화면 미리보기 · 기준 흰색 203 nit'
+                      : 'SDR 변환 미리보기 · HDR 데이터는 유지됩니다.'}
+                  </p>
+                </>
+              )}
+              <p>
+                {a.precision === 'float'
+                  ? '최대 32MP · 고정밀 원본과 보정값을 유지하며 16비트 PNG로 출력합니다.'
+                  : '기존 프로젝트의 보정 결과를 유지합니다.'}
+              </p>
+
               <label>
                 작업 색공간
                 <select
@@ -1191,7 +1379,7 @@ function App() {
                     disabled={!!busy || !p3Supported}
                     onClick={() => void redevelopRaw()}
                   >
-                    RAW 원본에서 P3 다시 현상
+                    RAW 원본에서 16비트 P3 다시 현상
                   </button>
                   <p>현재 보정값은 유지하고 실행 취소 기록은 새로 시작합니다.</p>
                 </>
@@ -1317,7 +1505,16 @@ function App() {
           <button
             disabled={!active || !changed}
             onClick={() => {
-              change({ ...defaults, colorSpace: a.colorSpace }, true);
+              change(
+                {
+                  ...defaults,
+                  colorSpace: a.colorSpace,
+                  precision: a.precision,
+                  dynamicRange: a.dynamicRange,
+                  hdrPeak: a.hdrPeak,
+                },
+                true,
+              );
               setCompare(false);
             }}
           >
@@ -1390,7 +1587,16 @@ function App() {
                 onChange={(e) => setFormat(e.target.value)}
               >
                 <option value="jpeg">JPEG · 작은 용량, 높은 호환성</option>
-                <option value="png">PNG · 무손실 압축</option>
+                <option value="png">PNG · 8비트 무손실 압축</option>
+                <option value="png16" disabled={a.precision !== 'float'}>
+                  PNG · 16비트 SDR
+                </option>
+                <option
+                  value="hdr-png"
+                  disabled={a.precision !== 'float' || a.dynamicRange !== 'hdr'}
+                >
+                  PNG · 16비트 HDR PQ / Rec.2020
+                </option>
                 <option value="webp">WebP · 효율적인 압축</option>
               </select>
             </label>
@@ -1398,9 +1604,11 @@ function App() {
               출력 색공간
               <select
                 aria-label="출력 색공간"
-                value={exportColor}
+                disabled={format === 'hdr-png'}
+                value={format === 'hdr-png' ? 'rec2100-pq' : exportColor}
                 onChange={(e) => setExportColor(e.target.value as typeof exportColor)}
               >
+                {format === 'hdr-png' && <option value="rec2100-pq">Rec.2020 / PQ · HDR</option>}
                 <option value="working">작업 공간 유지 · {colorSpaceName(a.colorSpace)}</option>
                 <option value="srgb">sRGB · 웹 / 일반 화면</option>
                 <option value="display-p3" disabled={!p3Supported}>
@@ -1423,7 +1631,7 @@ function App() {
                 <option value="1080">긴 변 최대 1080px</option>
               </select>
             </label>
-            {format !== 'png' && (
+            {!['png', 'png16', 'hdr-png'].includes(format) && (
               <label>
                 이미지 품질 <output>{quality}%</output>
                 <input
@@ -1448,8 +1656,10 @@ function App() {
                 ? '촬영 정보·GPS 등 원본 EXIF 유지 · 방향과 크기는 보정 결과에 맞게 갱신'
                 : 'EXIF를 제외하고 저장'}
               <br />
-              {colorSpaceName(exportColor === 'working' ? a.colorSpace : exportColor)} · ICC 색상
-              프로파일 포함 · 원본 파일 유지
+              {format === 'hdr-png'
+                ? 'Rec.2020 / PQ · cICP 포함 · HDR 지원 뷰어 필요'
+                : `${colorSpaceName(exportColor === 'working' ? a.colorSpace : exportColor)} · ICC 포함${a.dynamicRange === 'hdr' ? ' · SDR 밝기로 변환' : ''}`}{' '}
+              · 원본 파일 유지
             </div>
             <button className="primary" disabled={!!busy} onClick={exportPhoto}>
               {busy ? <LoaderCircle size={16} className="spin" /> : <ArrowDownToLine size={16} />}{' '}

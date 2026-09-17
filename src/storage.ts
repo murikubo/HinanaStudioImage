@@ -13,7 +13,7 @@ export type Photo = {
   history: Adjustments[];
   cursor: number;
 };
-export type Project = { version: 1; photos: Photo[]; selected: string };
+export type Project = { version: 1 | 2; photos: Photo[]; selected: string };
 function db(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const r = indexedDB.open('hinana-image', 1);
@@ -64,7 +64,12 @@ export async function restoreWorkspace(): Promise<Project | undefined> {
 }
 export function validateProject(value: unknown): Project {
   const p = value as Project;
-  if (!p || p.version !== 1 || !Array.isArray(p.photos) || p.photos.length > 200)
+  if (
+    !p ||
+    (p.version !== 1 && p.version !== 2) ||
+    !Array.isArray(p.photos) ||
+    p.photos.length > 200
+  )
     throw new Error('지원하지 않는 프로젝트 형식입니다.');
   const ids = new Set<string>();
   for (const photo of p.photos) {
@@ -92,6 +97,13 @@ export function validateProject(value: unknown): Project {
     const a = { ...defaults, ...photo.adjustments };
     if (!['srgb', 'display-p3'].includes(a.colorSpace))
       throw new Error('지원하지 않는 작업 색공간입니다.');
+    if (
+      !['legacy', 'float'].includes(a.precision) ||
+      !['sdr', 'hdr'].includes(a.dynamicRange) ||
+      ![400, 1000, 2000, 4000].includes(a.hdrPeak) ||
+      (a.dynamicRange === 'hdr' && a.precision !== 'float')
+    )
+      throw new Error('지원하지 않는 정밀도/HDR 설정입니다.');
     for (const key of Object.keys(defaults) as (keyof Adjustments)[])
       if (
         typeof a[key] !== typeof defaults[key] ||
@@ -104,7 +116,7 @@ export function validateProject(value: unknown): Project {
     )
       throw new Error('자르기 값이 올바르지 않습니다.');
     for (const key of Object.keys(a) as (keyof Adjustments)[]) {
-      if (typeof a[key] === 'number' && key !== 'rotation') {
+      if (typeof a[key] === 'number' && key !== 'rotation' && key !== 'hdrPeak') {
         const limit = key === 'exposure' ? 3 : 100;
         if (
           (key.startsWith('skin') && (a[key] as number) < 0) ||

@@ -103,3 +103,14 @@ RAW 현상, 색상 정확도의 전문 계측, 60MP 경계 성능, Windows/Linux
 ### Windows 실제 실행 결과
 
 코드 커밋 `701686c`의 [Windows CI 실행](https://github.com/murikubo/HinanaStudioImage/actions/runs/35089093313)이 전체 성공했습니다. Windows에서 단위 테스트 30개, NSIS 빌드, 패키징된 EXE의 기존 기능 통합 테스트, P3 편집/ICC 출력, 상단바 배치, 실제 NEF 현상/재현상/프로젝트/EXIF 테스트와 산출물 업로드를 완료했습니다. 설치 마법사 수동 완주 및 물리 디스플레이 색도 측정은 이 자동 실행에 포함되지 않습니다.
+
+## v0.8.0 HDR / 고정밀 검증
+
+- 단위 테스트 34개 통과. 16비트 PNG의 4,096단계 그라데이션은 노출 보정 후에도 4,000개 이상의 단계를 유지하며, 중립 sRGB 왕복은 16비트 코드값 오차 1 이내입니다. 원본 불변성, 선형 회전, P3 매트릭스/TRC ICC, EXIF 방향, ST 2084 PQ 기준값과 HDR headroom 왕복을 검증했습니다.
+- Electron 앱에서 16비트 PNG 입력·출력, ICC/EXIF, PQ Rec.2020 cICP, HDR 재불러오기, 프로젝트 v2 저장/자동 복원을 확인했습니다. 기존 v1 프로젝트는 8비트 경로로 복원됩니다.
+- HDR Canvas API와 float16 픽셀 값 2.0 유지, 앱의 HDR 미리보기 경로 및 SDR 대체 경로를 테스트했습니다. HDR 표시 감지 신호를 강제로 설정하는 테스트는 픽셀 전달만 검증하며 실제 HDR 패널의 휘도 측정은 아닙니다. `docs/hdr-editing.png`는 SDR로 찍은 UI 배치 확인용 그라데이션입니다.
+- 기존 전체 UI 및 P3 회귀 테스트를 통과했습니다. macOS Core Image와 Windows용 LibRaw WASM 경로에서 실제 Nikon NEF의 현상 PNG가 16비트이며 P3 ICC를 포함하는 것을 확인했습니다. RAW 원본/EXIF 보존, 재현상, 프로젝트 복원과 손상 파일 격리도 통과했습니다.
+- 고정밀 입력의 지원 범위는 RGB 매트릭스/TRC ICC PNG와 PQ Rec.2020 PNG입니다. TIFF, LUT ICC, HLG, gain map, 장면 선형 RAW highlight recovery와 노출 병합은 검증/지원하지 않습니다. 고정밀/새 RAW는 메모리 사용량을 고려해 32MP로 제한합니다.
+- 구현 참고: [W3C HDR PQ PNG](https://www.w3.org/TR/png-hdr-pq/), [PNG 3 설명](https://github.com/w3c/PNG-spec/blob/main/Third_Edition_Explainer.md), Chromium의 `CanvasHDR` 전용 기능과 `configureHighDynamicRange`. HDR 입력/출력과 모니터에서의 실제 HDR 표시는 구분합니다.
+
+macOS v0.8.0 패키지에서도 HDR 전용 테스트와 전체 UI 통합 테스트를 통과했습니다. Windows x64 NSIS 설치 파일을 생성했으며 실제 Windows 실행은 추가된 CI에서 확인합니다.

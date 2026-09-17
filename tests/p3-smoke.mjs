@@ -184,6 +184,12 @@ try {
     .setInputFiles(path.join(downloads, 'Hinana-Workspace.hinanaimage'));
   await page.waitForTimeout(300);
   assert.equal(await page.getByLabel('작업 색공간', { exact: true }).inputValue(), 'display-p3');
+  project.version = 1;
+  for (const a of [project.photos[0].adjustments, ...project.photos[0].history]) {
+    delete a.precision;
+    delete a.dynamicRange;
+    delete a.hdrPeak;
+  }
   delete project.photos[0].adjustments.colorSpace;
   for (const a of project.photos[0].history) delete a.colorSpace;
   const legacy = path.join(root, 'legacy.hinanaimage');
@@ -191,6 +197,7 @@ try {
   await page.getByTestId('project-file-input').setInputFiles(legacy);
   await page.waitForTimeout(300);
   assert.equal(await page.getByLabel('작업 색공간', { exact: true }).inputValue(), 'srgb');
+  assert.equal(await page.getByLabel('편집 정밀도', { exact: true }).inputValue(), 'legacy');
   assert.deepEqual(errors, []);
   console.log(
     'PASS: wide-gamut import/edit/undo, sRGB proof and conversion, P3 JPEG/PNG/WebP ICC + EXIF, EXIF opt-out keeps ICC, project save/reopen/autosave and legacy sRGB',

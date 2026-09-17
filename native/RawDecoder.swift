@@ -16,18 +16,18 @@ if #available(macOS 12.0, *) {
             abortDecode("이 카메라의 RAW 형식을 현재 macOS에서 지원하지 않습니다.")
         }
         let native = raw.nativeSize
-        guard native.width > 0, native.height > 0, native.width * native.height <= 60_000_000 else {
-            abortDecode("60MP 이하의 RAW 사진만 지원합니다.")
+        guard native.width > 0, native.height > 0, native.width * native.height <= 32_000_000 else {
+            abortDecode("32MP 이하의 RAW 사진만 지원합니다.")
         }
         // Full sensor decode; never use embedded previewImage or a thumbnail fallback.
         raw.scaleFactor = 1.0
         raw.isDraftModeEnabled = false
         guard let image = raw.outputImage else { abortDecode("RAW 원본 데이터를 현상할 수 없습니다. 파일 또는 카메라 지원 여부를 확인해 주세요.") }
         let rect = image.extent.integral
-        guard rect.width > 0, rect.height > 0, rect.width * rect.height <= 60_000_000 else { abortDecode("RAW 출력 크기가 허용 범위를 초과했습니다.") }
+        guard rect.width > 0, rect.height > 0, rect.width * rect.height <= 32_000_000 else { abortDecode("RAW 출력 크기가 허용 범위를 초과했습니다.") }
         let colorSpace = CGColorSpace(name: CGColorSpace.displayP3)!
         let context = CIContext(options: [.cacheIntermediates: false])
-        guard let rendered = context.createCGImage(image, from: rect, format: .RGBA8, colorSpace: colorSpace) else { abortDecode("RAW 이미지 렌더링에 실패했습니다.") }
+        guard let rendered = context.createCGImage(image, from: rect, format: .RGBA16, colorSpace: colorSpace) else { abortDecode("RAW 이미지 렌더링에 실패했습니다.") }
         var properties: [String: Any] = [:]
         if let source = CGImageSourceCreateWithURL(sourceURL as CFURL, nil), let original = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] {
             for key in [kCGImagePropertyExifDictionary, kCGImagePropertyTIFFDictionary, kCGImagePropertyGPSDictionary] {

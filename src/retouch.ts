@@ -25,7 +25,7 @@ export function skinWeight(r: number, g: number, b: number): number {
 }
 /** Five-tap separable bilateral smoothing with a soft skin mask and preserved alpha. */
 export function retouchSkin(
-  data: Uint8ClampedArray,
+  data: Uint8ClampedArray | Float32Array,
   width: number,
   height: number,
   a: SkinSettings,
@@ -42,7 +42,10 @@ export function retouchSkin(
   let blurred = source;
   if (a.skinSmooth > 0) {
     for (const horizontal of [true, false]) {
-      const out = new Uint8ClampedArray(source.length);
+      const out =
+        data instanceof Float32Array
+          ? new Float32Array(source.length)
+          : new Uint8ClampedArray(source.length);
       for (let y = 0; y < height; y++)
         for (let x = 0; x < width; x++) {
           const i = (y * width + x) * 4;

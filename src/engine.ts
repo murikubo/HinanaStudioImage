@@ -3,6 +3,9 @@ import { applyColorTools, colorDefaults, type ColorAdjustments } from './color-t
 import { retouchSkin } from './retouch.ts';
 export type Adjustments = ColorAdjustments & {
   colorSpace: WorkingColorSpace;
+  precision: 'legacy' | 'float';
+  dynamicRange: 'sdr' | 'hdr';
+  hdrPeak: number;
   skinSmooth: number;
   skinRedness: number;
   skinBrightness: number;
@@ -25,6 +28,9 @@ export type Adjustments = ColorAdjustments & {
 export const defaults: Adjustments = {
   ...colorDefaults,
   colorSpace: 'srgb',
+  precision: 'legacy',
+  dynamicRange: 'sdr',
+  hdrPeak: 1000,
   skinSmooth: 0,
   skinRedness: 0,
   skinBrightness: 0,
@@ -118,12 +124,13 @@ export const presets: {
 const clamp = (v: number) => Math.max(0, Math.min(255, v));
 /** Pixel pipeline shared by the preview and full-resolution export. Source is never mutated. */
 export function adjustPixels(
-  data: Uint8ClampedArray,
+  data: Uint8ClampedArray | Float32Array,
   width: number,
   height: number,
   a: Adjustments,
 ): void {
   retouchSkin(data, width, height, a);
+  const limit = data instanceof Float32Array ? (v: number) => Math.max(0, v) : clamp;
   const exp = 2 ** a.exposure,
     contrast = (1 + a.contrast / 100) ** 2;
   const weights =
@@ -157,9 +164,9 @@ export function adjustPixels(
         y = (Math.floor(p / width) / height) * 2 - 1;
       v -= ((Math.min(1, (x * x + y * y) / 1.5) ** 1.5 * a.vignette) / 100) * 0.85;
     }
-    data[i] = clamp((r * (1 - fade * 0.5) + fade * 40) * v);
-    data[i + 1] = clamp((g * (1 - fade * 0.5) + fade * 40) * v);
-    data[i + 2] = clamp((b * (1 - fade * 0.5) + fade * 40) * v);
+    data[i] = limit((r * (1 - fade * 0.5) + fade * 40) * v);
+    data[i + 1] = limit((g * (1 - fade * 0.5) + fade * 40) * v);
+    data[i + 2] = limit((b * (1 - fade * 0.5) + fade * 40) * v);
   }
   applyColorTools(data, a);
 }

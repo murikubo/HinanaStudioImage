@@ -50,7 +50,7 @@ try {
   );
   await page.getByRole('button', { name: '프로그램 정보', exact: true }).click();
   await page.getByRole('dialog').getByText('비나래', { exact: true }).waitFor();
-  await page.getByRole('dialog').getByText('Ver. 0.7.0', { exact: true }).waitFor();
+  await page.getByRole('dialog').getByText('Ver. 0.8.0', { exact: true }).waitFor();
   assert.ok(
     await page.locator('.about-icon').evaluate((img) => img.complete && img.naturalWidth > 1000),
   );
@@ -348,6 +348,9 @@ try {
   );
   assert.equal(await page.getByRole('button', { name: '골든 아워 따뜻하게 머무는 빛' }).count(), 1);
   await page.getByRole('button', { name: '색상·톤', exact: true }).click();
+  await page.waitForFunction(
+    () => document.querySelector('.canvas-holder canvas')?.getAttribute('aria-busy') === 'false',
+  );
   const colorBefore = await page.locator('canvas').evaluate((c) => c.toDataURL());
   await page.getByRole('button', { name: '파랑 색상 선택', exact: true }).click();
   await page.getByLabel('파랑 명도', { exact: true }).press('Home');

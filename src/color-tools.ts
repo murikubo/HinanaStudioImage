@@ -42,19 +42,29 @@ export function curveLut(a: ColorAdjustments) {
   return lut;
 }
 /** Interpolate adjacent hue bands on the circular hue axis, keeping neutrals neutral. */
-export function applyColorTools(data: Uint8ClampedArray, a: ColorAdjustments) {
+export function applyColorTools(data: Uint8ClampedArray | Float32Array, a: ColorAdjustments) {
   const mixerOn = colorBands.some((b) =>
     ['hue', 'saturation', 'luminance'].some((k) => a[`mixer_${b.id}_${k}` as MixerKey]),
   );
   const curveOn = !!(a.curveShadows || a.curveMidtones || a.curveHighlights);
   if (!mixerOn && !curveOn) return;
-  const lut = curveOn ? curveLut(a) : undefined;
+  const floating = data instanceof Float32Array;
+  const points = curvePoints(a);
+  const continuousCurve = (v: number) => {
+    const x = v / 255,
+      segment = Math.max(0, Math.min(3, Math.floor(x * 4)));
+    const [x0, y0] = points[segment],
+      [x1, y1] = points[segment + 1];
+    return Math.max(0, (y0 + ((y1 - y0) * (x - x0)) / (x1 - x0)) * 255);
+  };
+  const lut = curveOn && !floating ? curveLut(a) : undefined;
   for (let i = 0; i < data.length; i += 4) {
     if (!data[i + 3]) continue;
     if (mixerOn) {
-      const r = data[i] / 255,
-        g = data[i + 1] / 255,
-        b = data[i + 2] / 255;
+      const gain = floating ? Math.max(1, data[i] / 255, data[i + 1] / 255, data[i + 2] / 255) : 1;
+      const r = data[i] / (255 * gain),
+        g = data[i + 1] / (255 * gain),
+        b = data[i + 2] / (255 * gain);
       const max = Math.max(r, g, b),
         min = Math.min(r, g, b),
         d = max - min;
@@ -100,11 +110,16 @@ export function applyColorTools(data: Uint8ClampedArray, a: ColorAdjustments) {
                     : h < 300
                       ? [x, 0, c]
                       : [c, 0, x];
-          data[i] = (rgb[0] + m) * 255;
-          data[i + 1] = (rgb[1] + m) * 255;
-          data[i + 2] = (rgb[2] + m) * 255;
+          data[i] = (rgb[0] + m) * 255 * gain;
+          data[i + 1] = (rgb[1] + m) * 255 * gain;
+          data[i + 2] = (rgb[2] + m) * 255 * gain;
         }
       }
+    }
+    if (curveOn && floating) {
+      data[i] = continuousCurve(data[i]);
+      data[i + 1] = continuousCurve(data[i + 1]);
+      data[i + 2] = continuousCurve(data[i + 2]);
     }
     if (lut) {
       data[i] = lut[data[i]];
