@@ -21,7 +21,8 @@ const app = await electron.launch({
   env,
 });
 const page = await app.firstWindow();
-page.setDefaultTimeout(15000);
+// Full-resolution 16-bit PNGs and IndexedDB restoration are substantially larger.
+page.setDefaultTimeout(120000);
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 await app.evaluate(
@@ -32,7 +33,7 @@ await app.evaluate(
   downloads,
 );
 async function completed(file) {
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 1800; i++) {
     try {
       if ((await fs.stat(file)).size > 100) return;
     } catch {}
@@ -136,6 +137,9 @@ try {
   assert.equal(await page.locator('.film-frame').count(), 1);
   assert.deepEqual(errors, []);
   console.log('PASS: unsupported/corrupt RAW fails cleanly without losing existing work');
+} catch (error) {
+  console.error('RAW test screen:', (await page.locator('body').innerText()).slice(-5000));
+  throw error;
 } finally {
   await app.close();
   await fs.rm(profile, { recursive: true, force: true });
