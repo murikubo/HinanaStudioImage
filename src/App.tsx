@@ -568,7 +568,17 @@ function App() {
     setBusy('프로젝트 저장 중');
     try {
       download(
-        new Blob([JSON.stringify({ version: 4, photos, selected })], { type: 'application/json' }),
+        new Blob(
+          [
+            JSON.stringify({
+              version: 4,
+              // Reopening already starts a new undo history; do not duplicate raster masks in JSON.
+              photos: photos.map((p) => ({ ...p, history: [], cursor: 0 })),
+              selected,
+            }),
+          ],
+          { type: 'application/json' },
+        ),
         'Hinana-Workspace.hinanaimage',
       );
       notify('원본과 보정값을 포함한 프로젝트를 저장했습니다.');

@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import assert from 'node:assert/strict';
 import { decode } from 'fast-png';
+import { pngChunks } from '../src/precision-codec.ts';
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'hinana-subject-'));
 const env = { ...process.env };
 delete env.ELECTRON_RUN_AS_NODE;
@@ -83,6 +84,11 @@ try {
   console.log('First recognition ms:', Date.now() - start);
   let project = await save();
   assert.equal(project.version, 4);
+  assert.deepEqual(
+    project.photos[0].history,
+    [],
+    'Export must not duplicate mask rasters in undo history',
+  );
   const mask = project.photos[0].adjustments.masks[0];
   assert.equal(mask.kind, 'subject');
   assert.equal(mask.points.length, 1);
@@ -135,6 +141,9 @@ try {
   assert.deepEqual(await sample(), finalPixels);
   const loaded = await save();
   assert.deepEqual(loaded.photos[0].adjustments.masks, project.photos[0].adjustments.masks);
+  await page.getByRole('button', { name: '편집', exact: true }).click();
+  await page.getByLabel('밝기 범위', { exact: true }).selectOption('hdr');
+  await idle();
   await page.getByRole('button', { name: '내보내기', exact: true }).click();
   await page.getByLabel('파일 형식', { exact: true }).selectOption('hdr-png');
   await page.getByRole('button', { name: '이미지 저장', exact: true }).click();
@@ -152,6 +161,10 @@ try {
     } catch {}
     await new Promise((r) => setTimeout(r, 100));
   }
+  assert.deepEqual(
+    [...pngChunks(await fs.readFile(path.join(root, exportName))).get('cICP')],
+    [9, 16, 0, 1],
+  );
   assert.equal(output?.depth, 16);
   assert.equal(output.width, 614);
   assert.equal(output.height, 410);
@@ -162,6 +175,17 @@ try {
   await page.getByRole('button', { name: '인식 취소', exact: true }).click();
   await page.getByText('피사체 인식 중…', { exact: false }).waitFor({ state: 'hidden' });
   assert.deepEqual((await save()).photos[0].adjustments.masks[0], savedMask);
+  // Reimport actual 16-bit PQ output: inference uses an SDR proxy, editing stays HDR/float.
+  await page.locator('input[multiple]').setInputFiles(path.join(root, exportName));
+  await idle();
+  await page.getByRole('button', { name: '피사체 선택', exact: true }).click();
+  await click(0.64, 0.6);
+  const hdrProject = await save();
+  const hdrPhoto = hdrProject.photos.find((p) => p.id === hdrProject.selected);
+  assert.equal(hdrPhoto.adjustments.precision, 'float');
+  assert.equal(hdrPhoto.adjustments.dynamicRange, 'hdr');
+  assert.equal(hdrPhoto.adjustments.masks[0].kind, 'subject');
+  assert.ok(hdrPhoto.adjustments.masks[0].raster.data.length > 1000);
   // Main-process validation rejects malformed inputs before model allocation.
   assert.ok(
     await page.evaluate(async () => {
@@ -183,5 +207,5 @@ try {
 }
 assert.deepEqual(errors, []);
 console.log(
-  'PASS: offline subject recognition, refinement, local exposure, cancellation, undo/redo, project/autosave, HDR export',
+  'PASS: offline subject recognition, refinement, local exposure, cancellation, undo/redo, project/autosave, HDR export and input',
 );
