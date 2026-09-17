@@ -1,10 +1,15 @@
 import { linear, encoded } from './precision-math.ts';
 export type MaskPoint = { x: number; y: number; start?: boolean; exclude?: boolean };
+export type MaskStroke = { points: MaskPoint[]; radius: number; feather: number; erase: boolean };
+export type SubjectTool = 'ai' | 'add' | 'erase';
+export const MAX_REFINE_POINTS = 4096;
+export const MAX_REFINE_STROKES = 128;
 export type LocalMask = {
   id: string;
   name: string;
   kind: 'brush' | 'linear' | 'radial' | 'subject';
   raster?: { width: number; height: number; data: string };
+  strokes?: MaskStroke[];
   points: MaskPoint[];
   radius: number;
   feather: number;
@@ -149,6 +154,25 @@ export function maskCoverage(
         result[y * width + x] = edge(d, mask.feather);
       }
   }
+  if (mask.kind === 'subject') {
+    for (const stroke of mask.strokes || []) {
+      const weights = maskCoverage(
+        {
+          ...newMask('brush', 'stroke'),
+          points: stroke.points,
+          radius: stroke.radius,
+          feather: stroke.feather,
+        },
+        width,
+        height,
+        g,
+      );
+      for (let i = 0; i < result.length; i++)
+        result[i] = stroke.erase
+          ? result[i] * (1 - weights[i])
+          : result[i] + (1 - result[i]) * weights[i];
+    }
+  }
   for (let i = 0; i < result.length; i++)
     result[i] = (mask.inverted ? 1 - result[i] : result[i]) * mask.opacity;
   return result;
@@ -221,6 +245,44 @@ export function validateMasks(value: unknown): LocalMask[] {
     )
       throw Error('마스크 데이터가 올바르지 않습니다.');
     ids.add(m.id);
+    if (m.strokes !== undefined) {
+      if (
+        m.kind !== 'subject' ||
+        !m.raster ||
+        !Array.isArray(m.strokes) ||
+        m.strokes.length > MAX_REFINE_STROKES
+      )
+        throw Error('수동 마스크 수정 데이터가 올바르지 않습니다.');
+      let count = 0;
+      for (const stroke of m.strokes) {
+        if (
+          !stroke ||
+          typeof stroke.erase !== 'boolean' ||
+          !Array.isArray(stroke.points) ||
+          !stroke.points.length ||
+          !Number.isFinite(stroke.radius) ||
+          stroke.radius < 0.005 ||
+          stroke.radius > 0.5 ||
+          !Number.isFinite(stroke.feather) ||
+          stroke.feather < 0 ||
+          stroke.feather > 1
+        )
+          throw Error('수동 브러시 데이터가 올바르지 않습니다.');
+        count += stroke.points.length;
+        if (count > MAX_REFINE_POINTS) throw Error('수동 브러시 경로가 너무 많습니다.');
+        for (const p of stroke.points)
+          if (
+            !p ||
+            !Number.isFinite(p.x) ||
+            !Number.isFinite(p.y) ||
+            p.x < 0 ||
+            p.x > 1 ||
+            p.y < 0 ||
+            p.y > 1
+          )
+            throw Error('수동 브러시 좌표가 올바르지 않습니다.');
+      }
+    }
     if (m.kind === 'subject') {
       if (m.points.some((p: MaskPoint) => typeof p?.exclude !== 'boolean'))
         throw Error('피사체 선택 좌표가 올바르지 않습니다.');

@@ -87,7 +87,7 @@ try {
   await idle();
   await page.getByTitle('프로젝트 저장 (⌘/Ctrl S)').click();
   const project = JSON.parse(await waitFile('Hinana-Workspace.hinanaimage'));
-  assert.equal(project.version, 4);
+  assert.equal(project.version, 5);
   assert.equal(project.photos[0].adjustments.masks.length, 1);
   await page.getByRole('button', { name: '내보내기', exact: true }).click();
   await page.getByLabel('파일 형식', { exact: true }).selectOption('png');
@@ -147,7 +147,7 @@ try {
   assert.ok(high.data[(50 * 200 + 60) * 4] > high.data[(50 * 200 + 180) * 4]);
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: radial/brush local edits, untouched areas, undo/redo, disable, overlay-free export, v4 project reopen and autosave',
+    'PASS: radial/brush local edits, untouched areas, undo/redo, disable, overlay-free export, v5 project reopen and autosave',
   );
 } finally {
   await app.close();

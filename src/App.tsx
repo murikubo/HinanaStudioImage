@@ -1,5 +1,5 @@
 import { selectSubject } from './subject-client';
-import type { LocalMask, MaskPoint } from './local-masks';
+import type { LocalMask, MaskPoint, SubjectTool } from './local-masks';
 import { MaskPanel, MaskOverlay } from './MaskEditor';
 import {
   requestPrecision,
@@ -185,6 +185,7 @@ function App() {
   const [proofSDR, setProofSDR] = useState(false);
   const [maskId, setMaskId] = useState('');
   const [maskOverlay, setMaskOverlay] = useState(true);
+  const [subjectTool, setSubjectTool] = useState<SubjectTool>('ai');
   const [subjectBusy, setSubjectBusy] = useState(false);
   const [subjectExclude, setSubjectExclude] = useState(false);
   const subjectJob = useRef<AbortController | null>(null);
@@ -196,6 +197,7 @@ function App() {
   useEffect(() => {
     cancelSubject();
     setSubjectExclude(false);
+    setSubjectTool('ai');
   }, [selected, maskId, tab]);
   useEffect(
     () => () => {
@@ -270,7 +272,7 @@ function App() {
     let obsolete = false;
     setSaveStatus('저장 중…');
     const timer = setTimeout(() => {
-      saveWorkspace({ version: 4, photos, selected })
+      saveWorkspace({ version: 5, photos, selected })
         .then(() => {
           if (!obsolete) {
             setSavedSnapshot({ photos, selected });
@@ -571,7 +573,7 @@ function App() {
         new Blob(
           [
             JSON.stringify({
-              version: 4,
+              version: 5,
               // Reopening already starts a new undo history; do not duplicate raster masks in JSON.
               photos: photos.map((p) => ({ ...p, history: [], cursor: 0 })),
               selected,
@@ -1111,6 +1113,7 @@ function App() {
                     mask={a.masks.find((m) => m.id === maskId) || a.masks[0]}
                     show={maskOverlay}
                     disabled={subjectBusy}
+                    subjectTool={subjectTool}
                     onSubjectPoint={recognizeSubject}
                     geometry={{
                       width: active.width,
@@ -1550,6 +1553,8 @@ function App() {
               onOverlay={setMaskOverlay}
               disabled={!active || compare || !!busy || subjectBusy}
               subjectBusy={subjectBusy}
+              subjectTool={subjectTool}
+              onSubjectTool={setSubjectTool}
               onCancelSubject={cancelSubject}
               exclude={subjectExclude}
               onExclude={setSubjectExclude}

@@ -197,3 +197,60 @@ test('subject validation rejects malformed rasters and invalid prompts before re
   ])
     assert.throws(() => validateMasks([{ ...m, ...patch }]));
 });
+
+test('subject brush additions and erasures compose in order and keep original AI raster', () => {
+  const g = { ...geometry, width: 100, height: 100, cropWidth: 100, cropHeight: 100 };
+  const raster = { width: 2, height: 2, data: Buffer.from([255, 0, 255, 0]).toString('base64') };
+  const m = {
+    ...newMask('subject', 's'),
+    points: [{ x: 0.25, y: 0.5, exclude: false }],
+    raster,
+    strokes: [
+      { points: [{ x: 0.8, y: 0.5 }], radius: 0.1, feather: 0.5, erase: false },
+      { points: [{ x: 0.25, y: 0.5 }], radius: 0.1, feather: 0.5, erase: true },
+    ],
+  };
+  const a = maskCoverage(m, 100, 100, g);
+  assert.equal(a[50 * 100 + 80], 1);
+  assert.equal(a[50 * 100 + 25], 0);
+  assert.equal(a[50 * 100 + 5], 1);
+  assert.equal(a[5 * 100 + 90], 0);
+  const restored = {
+    ...m,
+    strokes: [
+      ...m.strokes,
+      { points: [{ x: 0.25, y: 0.5 }], radius: 0.03, feather: 0, erase: false },
+    ],
+  };
+  assert.equal(maskCoverage(restored, 100, 100, g)[50 * 100 + 25], 1);
+  assert.equal(raster.data, '/wD/AA==');
+  const inverse = maskCoverage({ ...m, inverted: true, opacity: 0.4 }, 100, 100, g);
+  for (let i = 0; i < a.length; i++) assert.ok(Math.abs(inverse[i] - (1 - a[i]) * 0.4) < 1e-6);
+  assert.deepEqual(maskCoverage(validateMasks(JSON.parse(JSON.stringify([m])))[0], 100, 100, g), a);
+  const rotated = maskCoverage(m, 100, 100, { ...g, rotation: 90, flip: true });
+  assert.equal(rotated[80 * 100 + 50], 1);
+  const crop = maskCoverage(m, 50, 50, { ...g, cropWidth: 50, cropHeight: 50 });
+  assert.equal(crop[25 * 50], 0);
+  // Changing brush settings must not resize old strokes.
+  assert.deepEqual(maskCoverage({ ...m, radius: 0.5, feather: 0 }, 100, 100, g), a);
+});
+test('manual strokes reject invalid values and excessive data', () => {
+  const m = {
+    ...newMask('subject', 's'),
+    points: [{ x: 0.5, y: 0.5, exclude: false }],
+    raster: { width: 1, height: 1, data: '/w==' },
+  };
+  const stroke = { points: [{ x: 0.5, y: 0.5 }], radius: 0.1, feather: 0.5, erase: false };
+  for (const strokes of [
+    null,
+    [null],
+    [{ ...stroke, radius: NaN }],
+    [{ ...stroke, feather: 2 }],
+    [{ ...stroke, erase: 'yes' }],
+    [{ ...stroke, points: [] }],
+    [{ ...stroke, points: [{ x: 2, y: 0.5 }] }],
+    Array(129).fill(stroke),
+    [{ ...stroke, points: Array(4097).fill({ x: 0.5, y: 0.5 }) }],
+  ])
+    assert.throws(() => validateMasks([{ ...m, strokes }]));
+});

@@ -65,8 +65,9 @@ try {
   const before = await sample();
   await page.getByRole('button', { name: '◉ 마스크', exact: true }).click();
   await page.getByRole('button', { name: '피사체 선택', exact: true }).click();
-  const box = await page.getByLabel('마스크 그리기 영역').boundingBox();
+  let box = await page.getByLabel('마스크 그리기 영역').boundingBox();
   const click = async (x, y) => {
+    box = await page.getByLabel('마스크 그리기 영역').boundingBox();
     await page.mouse.click(box.x + box.width * x, box.y + box.height * y);
     await page.getByText('피사체 인식 중…', { exact: false }).waitFor();
     await page.getByText('피사체 인식 중…', { exact: false }).waitFor({ state: 'hidden' });
@@ -83,7 +84,7 @@ try {
   await click(0.64, 0.6);
   console.log('First recognition ms:', Date.now() - start);
   let project = await save();
-  assert.equal(project.version, 4);
+  assert.equal(project.version, 5);
   assert.deepEqual(
     project.photos[0].history,
     [],
@@ -119,9 +120,53 @@ try {
   assert.deepEqual(await sample(), edited);
   await page.getByTitle('다시 실행 (⌘/Ctrl Shift Z)').click();
   await idle();
+  const aiOnly = await sample();
+  await page.getByRole('button', { name: '브러시로 더하기', exact: true }).click();
+  await page.getByLabel('브러시 반경', { exact: true }).fill('0.05');
+  await page.getByLabel('브러시 반경', { exact: true }).press('ArrowRight');
+  await page.getByLabel('브러시 경계 부드러움', { exact: true }).fill('0');
+  await page.getByLabel('브러시 경계 부드러움', { exact: true }).press('Home');
+  async function stroke(x, y, cancel = false) {
+    box = await page.getByLabel('마스크 그리기 영역').boundingBox();
+    await page.mouse.move(box.x + box.width * (x - 0.01), box.y + box.height * y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * (x + 0.01), box.y + box.height * y, { steps: 4 });
+    if (cancel) await page.keyboard.press('Escape');
+    await page.mouse.up();
+    await idle();
+  }
+  await stroke(0.1, 0.8);
+  const added = await sample();
+  assert.ok(added.grass[0] > before.grass[0]);
+  assert.deepEqual(added.dog, aiOnly.dog);
+  await page.getByRole('button', { name: '브러시로 지우기', exact: true }).click();
+  await stroke(0.64, 0.6);
+  const erased = await sample();
+  assert.deepEqual(erased.dog, before.dog);
+  assert.deepEqual(erased.grass, added.grass);
+  await page.getByTitle('실행 취소 (⌘/Ctrl Z)').click();
+  await idle();
+  assert.deepEqual(await sample(), added);
+  await page.getByTitle('다시 실행 (⌘/Ctrl Shift Z)').click();
+  await idle();
+  assert.deepEqual(await sample(), erased);
+  await stroke(0.1, 0.8, true);
+  assert.deepEqual(await sample(), erased);
+  const manualMask = (await save()).photos[0].adjustments.masks[0];
+  assert.equal(manualMask.strokes.length, 2);
+  assert.equal(manualMask.strokes[0].erase, false);
+  assert.equal(manualMask.strokes[1].erase, true);
+  await page.getByRole('button', { name: '수동 수정 초기화', exact: true }).click();
+  await idle();
+  assert.deepEqual(await sample(), aiOnly);
+  await page.getByTitle('실행 취소 (⌘/Ctrl Z)').click();
+  await idle();
+  assert.deepEqual(await sample(), erased);
   await page.getByRole('button', { name: '선택에 추가', exact: true }).click();
   await click(0.48, 0.62);
   project = await save();
+  assert.deepEqual(project.photos[0].adjustments.masks[0].strokes, manualMask.strokes);
+  assert.deepEqual(await sample(), erased);
   assert.equal(project.photos[0].adjustments.masks[0].points.length, 3);
   assert.equal(project.photos[0].adjustments.masks[0].points[2].exclude, false);
   const finalPixels = await sample();
@@ -207,5 +252,5 @@ try {
 }
 assert.deepEqual(errors, []);
 console.log(
-  'PASS: offline subject recognition, refinement, local exposure, cancellation, undo/redo, project/autosave, HDR export and input',
+  'PASS: offline subject recognition, refinement, local exposure, cancellation, undo/redo, manual add/erase strokes, history/cancel/reset, project/autosave, HDR export and input',
 );

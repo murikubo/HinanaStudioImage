@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import {
   MAX_MASKS,
   MAX_MASK_POINTS,
+  MAX_REFINE_POINTS,
+  MAX_REFINE_STROKES,
+  type SubjectTool,
   newMask,
   maskCoverage,
   maskToSource,
@@ -18,6 +21,8 @@ type Props = {
   onOverlay: (show: boolean) => void;
   disabled: boolean;
   subjectBusy: boolean;
+  subjectTool: SubjectTool;
+  onSubjectTool: (tool: SubjectTool) => void;
   onCancelSubject: () => void;
   exclude: boolean;
   onExclude: (exclude: boolean) => void;
@@ -31,6 +36,8 @@ export function MaskPanel({
   onOverlay,
   disabled,
   subjectBusy,
+  subjectTool,
+  onSubjectTool,
   onCancelSubject,
   exclude,
   onExclude,
@@ -143,29 +150,87 @@ export function MaskPanel({
                   : '사진에서 선택할 피사체를 클릭하세요. 첫 인식은 시간이 걸릴 수 있습니다.'}
               </p>
               <div className="mask-actions">
-                <button aria-pressed={!exclude} onClick={() => onExclude(false)}>
+                <button
+                  aria-pressed={subjectTool === 'ai' && !exclude}
+                  onClick={() => {
+                    onExclude(false);
+                    onSubjectTool('ai');
+                  }}
+                >
                   선택에 추가
                 </button>
                 <button
-                  aria-pressed={exclude}
+                  aria-pressed={subjectTool === 'ai' && exclude}
                   disabled={!mask.points.length}
-                  onClick={() => onExclude(true)}
+                  onClick={() => {
+                    onExclude(true);
+                    onSubjectTool('ai');
+                  }}
                 >
                   선택에서 제외
                 </button>
                 <button
                   disabled={!mask.points.length}
                   onClick={() => {
-                    update({ points: [], raster: undefined }, true);
+                    update({ points: [], raster: undefined, strokes: undefined }, true);
+                    onSubjectTool('ai');
                     onExclude(false);
                   }}
                 >
                   선택 다시 시작
                 </button>
               </div>
-              <p>
-                Alt/Option 클릭으로 제외 · 최대 32점 · 로컬 AI 인식 결과는 부정확할 수 있습니다.
-              </p>
+              <div className="mask-actions subject-tools" aria-label="피사체 다듬기 도구">
+                <button aria-pressed={subjectTool === 'ai'} onClick={() => onSubjectTool('ai')}>
+                  AI 클릭
+                </button>
+                <button
+                  disabled={!mask.raster}
+                  aria-pressed={subjectTool === 'add'}
+                  onClick={() => {
+                    onSubjectTool('add');
+                    onOverlay(true);
+                  }}
+                >
+                  브러시로 더하기
+                </button>
+                <button
+                  disabled={!mask.raster}
+                  aria-pressed={subjectTool === 'erase'}
+                  onClick={() => {
+                    onSubjectTool('erase');
+                    onOverlay(true);
+                  }}
+                >
+                  브러시로 지우기
+                </button>
+              </div>
+              {mask.raster && (
+                <>
+                  <p>드래그로 다듬기 · Alt/Option: 지우기 · Esc: 현재 획 취소</p>
+                  <p>
+                    수동 수정 {mask.strokes?.length || 0}/{MAX_REFINE_STROKES}획 ·{' '}
+                    {(mask.strokes || []).reduce((n, s) => n + s.points.length, 0)}/
+                    {MAX_REFINE_POINTS}점
+                  </p>
+                  <button
+                    disabled={!mask.strokes?.length}
+                    onClick={() => update({ strokes: undefined }, true)}
+                  >
+                    수동 수정 초기화
+                  </button>
+                </>
+              )}
+              <details className="subject-help">
+                <summary>다듬기 사용 안내</summary>
+                <p>
+                  수동 수정은 반전 전 영역에 적용됩니다. AI를 다시 클릭해도 유지되며, 브러시
+                  크기·부드러움은 새로 그리는 획에만 적용됩니다.
+                </p>
+                <p>
+                  Alt/Option 클릭으로 제외 · 최대 32점 · 로컬 AI 인식 결과는 부정확할 수 있습니다.
+                </p>
+              </details>
             </>
           )}
           {mask.kind === 'brush' && (
@@ -181,10 +246,18 @@ export function MaskPanel({
           {(
             [
               { key: 'opacity', label: '마스크 강도', min: 0, max: 1, step: 0.01 },
-              ...(mask.kind === 'subject'
+              ...(mask.kind === 'subject' && subjectTool === 'ai'
                 ? []
-                : [{ key: 'feather', label: '경계 부드러움', min: 0, max: 1, step: 0.01 }]),
-              ...(mask.kind === 'brush'
+                : [
+                    {
+                      key: 'feather',
+                      label: mask.kind === 'subject' ? '브러시 경계 부드러움' : '경계 부드러움',
+                      min: 0,
+                      max: 1,
+                      step: 0.01,
+                    },
+                  ]),
+              ...(mask.kind === 'brush' || (mask.kind === 'subject' && subjectTool !== 'ai')
                 ? [{ key: 'radius', label: '브러시 반경', min: 0.005, max: 0.5, step: 0.005 }]
                 : []),
               { key: 'exposure', label: '로컬 노출', min: -3, max: 3, step: 0.05 },
@@ -226,6 +299,7 @@ export function MaskOverlay({
   onChange,
   onSubjectPoint,
   disabled = false,
+  subjectTool = 'ai',
 }: {
   mask?: LocalMask;
   geometry: MaskGeometry;
@@ -233,14 +307,24 @@ export function MaskOverlay({
   onChange: (mask: LocalMask) => void;
   onSubjectPoint: (mask: LocalMask, point: MaskPoint) => void;
   disabled?: boolean;
+  subjectTool?: SubjectTool;
 }) {
   const [draft, setDraft] = useState<LocalMask | null>(null),
-    [preview, setPreview] = useState('');
+    [preview, setPreview] = useState(''),
+    [hover, setHover] = useState<MaskPoint | null>(null);
   const dragging = useRef<LocalMask | null>(null);
   useEffect(() => {
     dragging.current = null;
     setDraft(null);
-  }, [mask, geometry.rotation, geometry.flip, geometry.cropWidth, geometry.cropHeight]);
+  }, [
+    mask,
+    subjectTool,
+    disabled,
+    geometry.rotation,
+    geometry.flip,
+    geometry.cropWidth,
+    geometry.cropHeight,
+  ]);
   useEffect(() => {
     const cancel = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -294,10 +378,21 @@ export function MaskOverlay({
     return { x: Math.max(0, Math.min(1, p.x)), y: Math.max(0, Math.min(1, p.y)) };
   };
   const move = (e: React.PointerEvent<SVGSVGElement>) => {
+    const p = point(e);
+    setHover(p);
     const m = dragging.current;
     if (!m) return;
-    const p = point(e);
-    if (m.kind === 'brush') {
+    if (m.kind === 'subject') {
+      const strokes = m.strokes!,
+        stroke = strokes[strokes.length - 1],
+        last = stroke.points[stroke.points.length - 1];
+      if (
+        strokes.reduce((n, s) => n + s.points.length, 0) >= MAX_REFINE_POINTS ||
+        Math.hypot(p.x - last.x, p.y - last.y) < 0.002
+      )
+        return;
+      m.strokes = [...strokes.slice(0, -1), { ...stroke, points: [...stroke.points, p] }];
+    } else if (m.kind === 'brush') {
       const last = m.points[m.points.length - 1]!;
       if (m.points.length >= MAX_MASK_POINTS || Math.hypot(p.x - last.x, p.y - last.y) < 0.002)
         return;
@@ -313,7 +408,7 @@ export function MaskOverlay({
       preserveAspectRatio="none"
       onPointerDown={(e) => {
         if (e.button !== 0 || !mask.enabled || disabled) return;
-        if (mask.kind === 'subject') {
+        if (mask.kind === 'subject' && subjectTool === 'ai') {
           e.preventDefault();
           onSubjectPoint(mask, { ...point(e), exclude: e.altKey });
           return;
@@ -321,6 +416,29 @@ export function MaskOverlay({
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
         const p = point(e);
+        if (mask.kind === 'subject') {
+          const strokes = mask.strokes || [];
+          if (
+            !mask.raster ||
+            strokes.length >= MAX_REFINE_STROKES ||
+            strokes.reduce((n, s) => n + s.points.length, 0) >= MAX_REFINE_POINTS
+          )
+            return;
+          dragging.current = {
+            ...mask,
+            strokes: [
+              ...strokes,
+              {
+                points: [p],
+                radius: mask.radius,
+                feather: mask.feather,
+                erase: subjectTool === 'erase' || e.altKey,
+              },
+            ],
+          };
+          setDraft({ ...dragging.current });
+          return;
+        }
         dragging.current = {
           ...mask,
           points:
@@ -334,6 +452,7 @@ export function MaskOverlay({
         setDraft({ ...dragging.current });
       }}
       onPointerMove={move}
+      onPointerLeave={() => setHover(null)}
       onPointerUp={(e) => {
         move(e);
         const m = dragging.current;
@@ -344,6 +463,7 @@ export function MaskOverlay({
         if (
           m &&
           (m.kind === 'brush' ||
+            m.kind === 'subject' ||
             Math.hypot(m.points[1].x - m.points[0].x, m.points[1].y - m.points[0].y) > 0.003)
         )
           onChange(m);
@@ -354,6 +474,19 @@ export function MaskOverlay({
       }}
     >
       {preview && <image href={preview} width="1" height="1" preserveAspectRatio="none" />}
+      {hover && !disabled && mask.enabled && mask.kind === 'subject' && subjectTool !== 'ai' && (
+        <ellipse
+          cx={maskToDisplay(hover, geometry).x}
+          cy={maskToDisplay(hover, geometry).y}
+          rx={(mask.radius * Math.min(geometry.width, geometry.height)) / geometry.cropWidth}
+          ry={(mask.radius * Math.min(geometry.width, geometry.height)) / geometry.cropHeight}
+          fill="none"
+          stroke={subjectTool === 'erase' ? '#ff8096' : '#e4f4d4'}
+          strokeWidth="1.5"
+          vectorEffect="non-scaling-stroke"
+          pointerEvents="none"
+        />
+      )}
       {mask.kind === 'subject' &&
         show &&
         mask.points.map((p, i) => {
