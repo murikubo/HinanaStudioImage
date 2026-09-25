@@ -28,7 +28,35 @@
           "from": "native/bin/hinana-raw",
           "to": "raw/hinana-raw"
         }
-      ]
+      ],
+      "extendInfo": {
+        "UTExportedTypeDeclarations": [
+          {
+            "UTTypeIdentifier": "studio.hinana.image.project",
+            "UTTypeDescription": "Hinana Studio Image Project",
+            "UTTypeConformsTo": [
+              "public.data"
+            ],
+            "UTTypeIconFile": "icon.icns",
+            "UTTypeTagSpecification": {
+              "public.filename-extension": [
+                "hinanaimage"
+              ],
+              "public.mime-type": "application/vnd.hinana.image-project"
+            }
+          }
+        ],
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "Hinana Studio Image Project",
+            "CFBundleTypeRole": "None",
+            "CFBundleTypeIconFile": "icon.icns",
+            "LSItemContentTypes": [
+              "studio.hinana.image.project"
+            ]
+          }
+        ]
+      }
     },
     "win": {
       "target": [
