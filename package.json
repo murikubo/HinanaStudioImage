@@ -27,6 +27,10 @@
         {
           "from": "native/bin/hinana-raw",
           "to": "raw/hinana-raw"
+        },
+        {
+          "from": "assets/document-icon/HinanaImageDocument.icns",
+          "to": "HinanaImageDocument.icns"
         }
       ],
       "extendInfo": {
@@ -37,7 +41,7 @@
             "UTTypeConformsTo": [
               "public.data"
             ],
-            "UTTypeIconFile": "icon.icns",
+            "UTTypeIconFile": "HinanaImageDocument.icns",
             "UTTypeTagSpecification": {
               "public.filename-extension": [
                 "hinanaimage"
@@ -50,7 +54,7 @@
           {
             "CFBundleTypeName": "Hinana Studio Image Project",
             "CFBundleTypeRole": "None",
-            "CFBundleTypeIconFile": "icon.icns",
+            "CFBundleTypeIconFile": "HinanaImageDocument.icns",
             "LSItemContentTypes": [
               "studio.hinana.image.project"
             ]
