@@ -1,6 +1,14 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 contextBridge.exposeInMainWorld('hinana', {
   platform: process.platform,
+  takeProjectFile() {
+    return ipcRenderer.invoke('project:take');
+  },
+  onProjectAvailable(callback: () => void) {
+    const listener = () => callback();
+    ipcRenderer.on('project:available', listener);
+    return () => ipcRenderer.removeListener('project:available', listener);
+  },
   selectSubject(input: unknown) {
     return ipcRenderer.invoke('subject:select', input);
   },

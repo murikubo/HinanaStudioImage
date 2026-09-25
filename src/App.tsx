@@ -744,6 +744,41 @@ function App() {
     }
   }
   const keyboardActions = useRef({ undo, rate, choose, saveProject, active, photos, selected });
+  const [projectSignal, setProjectSignal] = useState(0);
+  const projectReadInFlight = useRef(false);
+  const openProjectRef = useRef(openProject);
+  openProjectRef.current = openProject;
+  useEffect(() => window.hinana?.onProjectAvailable(() => setProjectSignal((n) => n + 1)), []);
+  useEffect(() => {
+    if (
+      !window.hinana ||
+      !ready ||
+      busy ||
+      exportOpen ||
+      helpOpen ||
+      aboutOpen ||
+      projectReadInFlight.current
+    )
+      return;
+    projectReadInFlight.current = true;
+    let received = false;
+    void window.hinana
+      .takeProjectFile()
+      .then(async (result) => {
+        if (!result) return;
+        received = true;
+        if ('error' in result) notify(result.error);
+        else
+          await openProjectRef.current(
+            new File([result.text], result.name, { type: 'application/json' }),
+          );
+      })
+      .catch(() => notify('프로젝트 파일을 전달받지 못했습니다.'))
+      .finally(() => {
+        projectReadInFlight.current = false;
+        if (received) setProjectSignal((n) => n + 1);
+      });
+  }, [ready, busy, exportOpen, helpOpen, aboutOpen, projectSignal, notify]);
   keyboardActions.current = { undo, rate, choose, saveProject, active, photos, selected };
   useEffect(
     () =>

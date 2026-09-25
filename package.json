@@ -71,7 +71,15 @@
           ]
         }
       ],
-      "artifactName": "Hinana-Studio-Image-${version}-Windows-${arch}-Setup.${ext}"
+      "artifactName": "Hinana-Studio-Image-${version}-Windows-${arch}-Setup.${ext}",
+      "fileAssociations": [
+        {
+          "ext": "hinanaimage",
+          "name": "HinanaStudioImage.Project",
+          "description": "Hinana Studio Image Project",
+          "icon": "assets/document-icon/HinanaImageDocument.ico"
+        }
+      ]
     },
     "linux": {
       "target": [

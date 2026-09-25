@@ -2,6 +2,8 @@
 interface Window {
   hinana?: {
     platform: string;
+    takeProjectFile(): Promise<{ name: string; text: string } | { error: string } | null>;
+    onProjectAvailable(callback: () => void): () => void;
     selectSubject(input: {
       rgba: Uint8ClampedArray;
       width: number;

@@ -2,6 +2,24 @@ import { registerSubjectSelector } from './subject';
 import { registerRawDecoder } from './raw';
 import { app, BrowserWindow, Menu, shell, nativeTheme } from 'electron';
 import path from 'node:path';
+import { queueProjectArguments, queueProjectFile, registerProjectFiles } from './project-files';
+const primaryInstance = process.platform !== 'win32' || app.requestSingleInstanceLock();
+if (!primaryInstance) app.quit();
+if (primaryInstance) {
+  queueProjectArguments(process.argv.slice(app.isPackaged ? 1 : 2), process.cwd());
+  app.on('open-file', (event, file) => {
+    event.preventDefault();
+    queueProjectFile(file);
+    if (app.isReady() && BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+  app.on('second-instance', (_event, args, cwd) => {
+    queueProjectArguments(args.slice(1), cwd);
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win?.isMinimized()) win.restore();
+    win?.show();
+    win?.focus();
+  });
+}
 // Limit the opt-in to the Canvas HDR presentation API; no broad experimental flags.
 app.commandLine.appendSwitch('enable-blink-features', 'CanvasHDR');
 function createWindow() {
@@ -37,9 +55,11 @@ function createWindow() {
   else void win.loadFile(path.join(__dirname, '../dist/index.html'));
 }
 app.whenReady().then(() => {
+  if (!primaryInstance) return;
   nativeTheme.themeSource = 'dark';
   registerRawDecoder();
   registerSubjectSelector();
+  registerProjectFiles();
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       ...(process.platform === 'darwin'
