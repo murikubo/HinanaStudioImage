@@ -474,6 +474,8 @@ button.icon-button {
   align-items: flex-start;
 }
 .zoomed .canvas-holder {
+  /* Auto margins center spare space, and become zero on an overflowing axis. */
+  margin: auto;
   max-width: none;
   max-height: none;
 }
