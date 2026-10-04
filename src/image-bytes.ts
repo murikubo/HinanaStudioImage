@@ -8,3 +8,14 @@ export function dataURLBytes(url: string): Uint8Array {
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
 }
+/** Read a small byte range without decoding/copying the entire large data URL. */
+export function dataURLByteRange(url: string, start: number, end: number): Uint8Array {
+  const offset = url.indexOf(',') + 1;
+  const first = Math.floor(start / 3) * 4;
+  const last = Math.ceil(end / 3) * 4;
+  const binary = atob(url.slice(offset + first, offset + last));
+  const skip = start % 3;
+  const bytes = new Uint8Array(Math.max(0, Math.min(end - start, binary.length - skip)));
+  for (let i = 0; i < bytes.length; i++) bytes[i] = binary.charCodeAt(skip + i);
+  return bytes;
+}

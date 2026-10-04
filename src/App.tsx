@@ -326,7 +326,7 @@ function App() {
       try {
         let image = imageCache.current.get(active.id);
         if (!image) {
-          image = await loadImage(active.src);
+          image = await loadImage(active.src, active.nativePreview);
           imageCache.current.set(active.id, image);
         }
         if (cancelled || !canvas.current) return;
@@ -417,7 +417,7 @@ function App() {
     const photoId = active.id,
       source = active.src;
     try {
-      const raster = await selectSubject(source, points, controller.signal);
+      const raster = await selectSubject(source, points, controller.signal, active.nativePreview);
       if (controller.signal.aborted) return;
       setPhotos((current) =>
         current.map((p) => {
@@ -516,7 +516,7 @@ function App() {
             throw new Error(
               isRaw ? 'RAW는 120MB 이하만 지원합니다.' : '사진은 80MB 이하만 지원합니다.',
             );
-          let src: string, rawSource: string | undefined;
+          let src: string, rawSource: string | undefined, nativePreview: string | undefined;
           let nativePeak: number | undefined;
           if (nativeIOS && (isRaw || /\.(heic|heif|jpe?g)$/i.test(file.name))) {
             setBusy(isRaw ? `RAW 현상 중 · ${file.name}` : `HEIC/HDR 해독 중 · ${file.name}`);
@@ -526,6 +526,9 @@ function App() {
               raw: isRaw,
             });
             src = await nativeWorkingPNG(decoded);
+            nativePreview = decoded.preview
+              ? `data:image/jpeg;base64,${decoded.preview}`
+              : undefined;
             nativePeak = decoded.hdr ? decoded.peak * 203 : undefined;
             if (isRaw) rawSource = `data:application/octet-stream;base64,${original.split(',')[1]}`;
           } else if (isRaw) {
@@ -535,7 +538,7 @@ function App() {
             src = decoded.src;
             rawSource = decoded.original;
           } else src = await readDataURL(file);
-          const image = await loadImage(src);
+          const image = await loadImage(src, nativePreview);
           if (image.naturalWidth * image.naturalHeight > 60_000_000) throw new Error();
           const info = precisionSourceInfo(src);
           const initial: Adjustments = {
@@ -556,6 +559,7 @@ function App() {
             id: crypto.randomUUID(),
             name: file.name,
             src,
+            ...(nativePreview ? { nativePreview } : {}),
             width: image.naturalWidth,
             height: image.naturalHeight,
             rating: 0,
@@ -666,7 +670,7 @@ function App() {
       if (file.size > 512 * 1024 * 1024) throw new Error('512MB 이하의 프로젝트만 열 수 있습니다.');
       const project = validateProject(JSON.parse(await file.text()));
       for (const p of project.photos) {
-        const img = await loadImage(p.src);
+        const img = await loadImage(p.src, p.nativePreview);
         if (img.naturalWidth * img.naturalHeight > 60_000_000)
           throw new Error('60MP 이하의 사진만 지원합니다.');
         if (p.adjustments.precision === 'float')
@@ -699,7 +703,7 @@ function App() {
     if (!active || busy) return;
     setBusy('HDR 화면 미리보기 준비 중');
     try {
-      const image = await loadImage(active.src);
+      const image = await loadImage(active.src, active.nativePreview);
       const result = await requestPrecision(active.src, image, a, 2000, 'hdr-png');
       const png = await readDataURL(
         new Blob([result.png as Uint8Array<ArrayBuffer>], { type: 'image/png' }),
@@ -716,14 +720,16 @@ function App() {
     const photo = active;
     setBusy('RAW 원본에서 Display P3로 다시 현상 중');
     try {
-      const result = nativeIOS
-        ? {
-            src: await nativeWorkingPNG(
-              await NativeImages.decodeImage({ base64: photo.rawSource!.split(',')[1], raw: true }),
-            ),
-          }
+      const decoded = nativeIOS
+        ? await NativeImages.decodeImage({ base64: photo.rawSource!.split(',')[1], raw: true })
+        : undefined;
+      const result = decoded
+        ? { src: await nativeWorkingPNG(decoded) }
         : await window.hinana!.redevelopRaw(photo.rawSource!, photo.name);
-      const image = await loadImage(result.src);
+      const nativePreview = decoded?.preview
+        ? `data:image/jpeg;base64,${decoded.preview}`
+        : undefined;
+      const image = await loadImage(result.src, nativePreview);
       const metadata = await readMetadata(result.src);
       const next: Adjustments = {
         ...photo.adjustments,
@@ -738,6 +744,7 @@ function App() {
             ? {
                 ...p,
                 src: result.src,
+                nativePreview,
                 width: image.naturalWidth,
                 height: image.naturalHeight,
                 metadata,
@@ -762,7 +769,8 @@ function App() {
     setBusy('원본 해상도로 렌더링 중');
     await new Promise((r) => setTimeout(r, 50));
     try {
-      const img = imageCache.current.get(active.id) || (await loadImage(active.src)),
+      const img =
+          imageCache.current.get(active.id) || (await loadImage(active.src, active.nativePreview)),
         target = document.createElement('canvas');
       const outputColor = exportColor === 'working' ? a.colorSpace : exportColor;
       const highOutput = format === 'png16' || format === 'hdr-png';
@@ -1237,7 +1245,7 @@ function App() {
                     setMobileSection('tools');
                   }}
                 >
-                  <img src={p.src} alt={p.name} />
+                  <img src={p.nativePreview || p.src} alt={p.name} />
                   <span>{p.name}</span>
                   <small>
                     {p.width} × {p.height} <span>{'★'.repeat(p.rating)}</span>
@@ -1484,7 +1492,7 @@ function App() {
                   setView('edit');
                 }}
               >
-                <img src={p.src} alt={p.name} />
+                <img src={p.nativePreview || p.src} alt={p.name} />
                 <span>{String(i + 1).padStart(2, '0')}</span>
                 {p.rating > 0 && <small>★ {p.rating}</small>}
                 {JSON.stringify(p.adjustments) !== JSON.stringify(defaults) && <i />}

@@ -3,10 +3,15 @@ import { loadImage, defaults } from './engine';
 import { paintFloat, precisionSourceInfo, requestPrecision } from './precision-client';
 import type { MaskPoint } from './local-masks';
 /** Recognition uses an SDR proxy only; original precision and working pixels remain untouched. */
-export async function selectSubject(src: string, points: MaskPoint[], signal: AbortSignal) {
+export async function selectSubject(
+  src: string,
+  points: MaskPoint[],
+  signal: AbortSignal,
+  preview?: string,
+) {
   if (!window.hinana && !nativeIOS)
     throw Error('피사체 선택은 데스크톱 앱에서 사용할 수 있습니다.');
-  const image = await loadImage(src);
+  const image = await loadImage(src, preview);
   signal.throwIfAborted();
   const canvas = document.createElement('canvas');
   const info = precisionSourceInfo(src);

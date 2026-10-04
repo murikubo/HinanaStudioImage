@@ -8,15 +8,25 @@ import { pngInfo, decodePrecisionPNG } from '../src/precision-codec.ts';
 const fixtures = process.argv[2] || '/tmp/hinana-ios-fixtures';
 const png = await fs.readFile(`${fixtures}/gain.png`);
 const heic = await fs.readFile(`${fixtures}/gain.heic`);
+const previewJPEG = await fs.readFile(`${fixtures}/preview.jpg`);
 const browser = await chromium.launch({ channel: 'chromium' });
 const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
 page.setDefaultTimeout(30000);
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 await page.addInitScript(
-  ({ png }) => {
+  ({ png, preview }) => {
     window.webkit = { messageHandlers: { bridge: { postMessage() {} } } };
     window.__nativeCalls = [];
+    window.__workingPNGImageLoads = 0;
+    const srcProperty = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    Object.defineProperty(HTMLImageElement.prototype, 'src', {
+      ...srcProperty,
+      set(value) {
+        if (String(value).startsWith('data:image/png')) window.__workingPNGImageLoads++;
+        srcProperty.set.call(this, value);
+      },
+    });
     window.Capacitor = {
       convertFileSrc: (uri) => uri.replace('file://', '/_capacitor_file_'),
       PluginHeaders: [
@@ -44,7 +54,7 @@ await page.addInitScript(
           return { heic: true, raw: true, appleHDR: true, subject: true };
         if (method === 'pickImages')
           return { files: [{ uri: 'file:///cache/gain.heic', name: 'gain.heic' }], failures: [] };
-        if (method === 'decodeImage') return { png, hdr: true, peak: 3.9625 };
+        if (method === 'decodeImage') return { png, preview, hdr: true, peak: 3.9625 };
         if (method === 'getUri') return { uri: 'file:///cache/' + options.path };
         if (method === 'selectSubject') {
           const bytes = atob(options.png);
@@ -58,7 +68,7 @@ await page.addInitScript(
       },
     };
   },
-  { png: png.toString('base64') },
+  { png: png.toString('base64'), preview: previewJPEG.toString('base64') },
 );
 await page.route('**/_capacitor_file_/**', (route) =>
   route.fulfill({ body: heic, contentType: 'image/heic' }),
@@ -99,6 +109,10 @@ try {
   const source = Buffer.from(project.photos[0].src.split(',')[1], 'base64');
   assert.equal(pngInfo(source).depth, 16);
   assert.ok(decodePrecisionPNG(source).data[0] > 3.8);
+  assert.equal(
+    project.photos[0].nativePreview,
+    `data:image/jpeg;base64,${previewJPEG.toString('base64')}`,
+  );
   await page
     .getByLabel('모바일 작업 도구')
     .getByRole('button', { name: '편집', exact: true })
@@ -153,6 +167,11 @@ try {
     () => window.__nativeCalls.filter((c) => c.method === 'decodeImage').length === 3,
   );
   await idle();
+  assert.equal(
+    await page.evaluate(() => window.__workingPNGImageLoads),
+    0,
+    'Working PQ PNG must bypass HTML image decoding',
+  );
   assert.deepEqual(errors, []);
   console.log(
     'PASS iOS bridge: original HEIC, HDR auto mode, 16-bit project, HDR native preview and subject raster',

@@ -48,7 +48,7 @@ class HinanaImagesPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControllerDel
             autoreleasepool {
                 do {
                     let result = try NativeImageDecoder.decode(data, raw: raw)
-                    call.resolve(["png": result.png.base64EncodedString(), "hdr": result.hdr, "peak": Double(result.peak)])
+                    call.resolve(["png": result.png.base64EncodedString(), "preview": result.preview.base64EncodedString(), "hdr": result.hdr, "peak": Double(result.peak)])
                 } catch { call.reject(error.localizedDescription) }
             }
         }

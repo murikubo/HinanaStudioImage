@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 
 struct NativeDecodedImage {
     let png: Data
+    let preview: Data
     let hdr: Bool
     let peak: Float
 }
@@ -84,6 +85,17 @@ enum NativeImageDecoder {
         }
         CGImageDestinationAddImage(destination, rendered, metadata as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { throw NativeImageError.invalid("작업 PNG 저장에 실패했습니다.") }
-        return NativeDecodedImage(png: output as Data, hdr: hdr, peak: peak)
+        // WKWebView may reject large PQ/16-bit PNGs as HTML images. Its display
+        // image only supplies dimensions/legacy pixels; float editing reads png.
+        guard let display = context.createCGImage(image, from: extent, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.displayP3)!) else {
+            throw NativeImageError.invalid("화면 표시 이미지를 생성하지 못했습니다.")
+        }
+        let preview = NSMutableData()
+        guard let jpeg = CGImageDestinationCreateWithData(preview, UTType.jpeg.identifier as CFString, 1, nil) else {
+            throw NativeImageError.invalid("화면 표시 JPEG를 생성하지 못했습니다.")
+        }
+        CGImageDestinationAddImage(jpeg, display, [kCGImageDestinationLossyCompressionQuality: 0.92, kCGImagePropertyOrientation: 1] as CFDictionary)
+        guard CGImageDestinationFinalize(jpeg) else { throw NativeImageError.invalid("화면 표시 JPEG 저장에 실패했습니다.") }
+        return NativeDecodedImage(png: output as Data, preview: preview as Data, hdr: hdr, peak: peak)
     }
 }

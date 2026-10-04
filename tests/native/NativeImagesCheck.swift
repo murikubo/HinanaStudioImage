@@ -14,6 +14,10 @@ import Vision
   try ctx.writeHEIF10Representation(of: hdr, to: hdrURL, colorSpace: CGColorSpace(name: CGColorSpace.itur_2100_PQ)!, options: [:])
   let decoded = try NativeImageDecoder.decode(Data(contentsOf: hdrURL), raw: false)
   try decoded.png.write(to: root.appendingPathComponent("pq.png"))
+  try decoded.preview.write(to: root.appendingPathComponent("preview.jpg"))
+  let previewSource = CGImageSourceCreateWithData(decoded.preview as CFData, nil)!
+  let previewImage = CGImageSourceCreateImageAtIndex(previewSource, 0, nil)!
+  precondition(previewImage.width == 512 && previewImage.height == 384)
   precondition(decoded.hdr && decoded.peak > 3.8, "PQ highlights were clipped")
   print("PQ native", decoded.hdr, decoded.peak)
   let image = ctx.createCGImage(hdr.applyingFilter("CIExposureAdjust", parameters: [kCIInputEVKey: -2]), from: hdr.extent, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.displayP3)!)!

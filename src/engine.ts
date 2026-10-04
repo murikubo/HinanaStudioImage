@@ -238,13 +238,13 @@ export function histogram(data: Uint8ClampedArray) {
   for (let i = 0; i < data.length; i += 16) for (let c = 0; c < 3; c++) bins[c][data[i + c] >> 2]++;
   return bins;
 }
-export function loadImage(src: string): Promise<HTMLImageElement> {
+export function loadImage(src: string, preview?: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
     image.onerror = () =>
       reject(new Error('사진을 읽을 수 없습니다. JPG, PNG, WebP 파일인지 확인해 주세요.'));
-    image.src = src;
+    image.src = preview || src;
   });
 }
 export function readDataURL(blob: Blob): Promise<string> {

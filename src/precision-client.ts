@@ -1,8 +1,7 @@
 import { gpuHDRSupported, paintGPUHDR, prepareGPUHDR } from './hdr-gpu';
-import { dataURLBytes } from './image-bytes.ts';
 import type { Adjustments } from './engine';
 import { colorContext, type WorkingColorSpace } from './color-space';
-import { pngInfo, type FloatFrame } from './precision-codec';
+import { pngDataURLInfo, type FloatFrame } from './precision-codec';
 import { P3_SRGB, SRGB_P3, transform, encoded, sdrMap, SDR_WHITE } from './precision-math';
 type Result = { frame: FloatFrame; png: Uint8Array; width: number; height: number };
 let worker: Worker | undefined,
@@ -42,7 +41,7 @@ function getWorker() {
 }
 export function precisionSourceInfo(src: string) {
   if (!src.startsWith('data:image/png')) return { depth: 8, hdr: false };
-  return pngInfo(dataURLBytes(src));
+  return pngDataURLInfo(src);
 }
 function executePrecision(
   src: string,

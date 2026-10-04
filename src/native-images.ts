@@ -1,6 +1,6 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { useEffect, useState } from 'react';
-import { addPNGChunk, pngChunks } from './precision-codec';
+import { addPNGChunk, pngDataURLInfo } from './precision-codec';
 import { dataURLBytes } from './image-bytes';
 import { readDataURL } from './engine';
 import type { MaskPoint } from './local-masks';
@@ -11,7 +11,7 @@ export type ImageCapabilities = {
   subject: boolean;
   appleHDR: boolean;
 };
-export type NativeDecodeResult = { png: string; hdr: boolean; peak: number };
+export type NativeDecodeResult = { png: string; preview?: string; hdr: boolean; peak: number };
 export const NativeImages = registerPlugin<{
   showHDRPreview(input: { png: string }): Promise<void>;
   capabilities(): Promise<ImageCapabilities>;
@@ -49,14 +49,17 @@ export function useImageCapabilities() {
   return capabilities;
 }
 export async function nativeWorkingPNG(result: NativeDecodeResult) {
-  let bytes = dataURLBytes(`data:image/png;base64,${result.png}`);
+  const src = `data:image/png;base64,${result.png}`;
+  const { cicp } = pngDataURLInfo(src);
   if (result.hdr) {
-    const cicp = pngChunks(bytes).get('cICP');
     if (cicp && (cicp[0] !== 9 || cicp[1] !== 16 || cicp[2] !== 0 || cicp[3] !== 1))
       throw Error('네이티브 HDR 작업 이미지의 색상 정보가 올바르지 않습니다.');
-    if (!cicp) bytes = addPNGChunk(bytes, 'cICP', new Uint8Array([9, 16, 0, 1]));
+    if (!cicp) {
+      const bytes = addPNGChunk(dataURLBytes(src), 'cICP', new Uint8Array([9, 16, 0, 1]));
+      return readDataURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'image/png' }));
+    }
   }
-  return readDataURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'image/png' }));
+  return src;
 }
 /** Fetch cache files before releasing native picker copies; projects retain their own bytes. */
 export async function pickNativeFiles(source: 'photos' | 'files') {

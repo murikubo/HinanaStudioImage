@@ -1,7 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { encode, decode } from 'fast-png';
-import { decodePrecisionPNG, encodePrecisionPNG, pngChunks } from '../src/precision-codec.ts';
+import {
+  decodePrecisionPNG,
+  encodePrecisionPNG,
+  pngChunks,
+  pngDataURLInfo,
+  pngInfo,
+} from '../src/precision-codec.ts';
 import { renderFloat } from '../src/precision-engine.ts';
 import { defaults } from '../src/engine.ts';
 import {
@@ -149,4 +155,40 @@ test('SDR highlights expand explicitly into HDR, retain chroma/alpha, and surviv
   const sdr = renderFloat(source, { ...settings, dynamicRange: 'sdr' }, Infinity);
   assert.ok(Math.abs(sdr.data[0] - 1) < 0.001);
   assert.deepEqual(source.data, new Float32Array([1, 0.5, 0.25, 0.75, 0.4, 0.2, 0.1, 1]));
+});
+
+test('PNG data URL metadata skips pixels and handles unaligned base64 ranges', () => {
+  const pixels = new Uint16Array(128 * 128 * 3);
+  for (let i = 0; i < pixels.length; i++) pixels[i] = (i * 7919) % 65536;
+  const source = encode({ width: 128, height: 128, depth: 16, channels: 3, data: pixels });
+  const hdr = encodePrecisionPNG(
+    {
+      width: 1,
+      height: 1,
+      data: new Float32Array([4, 1, 0.5, 1]),
+      colorSpace: 'display-p3',
+      hdr: true,
+    },
+    'rec2100-pq',
+    1000,
+  );
+  const originalAtob = globalThis.atob;
+  let largestRead = 0;
+  globalThis.atob = (value) => {
+    largestRead = Math.max(largestRead, value.length);
+    return originalAtob(value);
+  };
+  try {
+    for (const png of [source, hdr]) {
+      const url = `data:image/png;base64,${Buffer.from(png).toString('base64')}`;
+      const info = pngDataURLInfo(url);
+      assert.equal(info.depth, pngInfo(png).depth);
+      assert.equal(info.hdr, pngInfo(png).hdr);
+      assert.deepEqual(info.cicp, pngChunks(png).get('cICP'));
+      assert.throws(() => pngDataURLInfo(url.slice(0, -16)), /잘렸/);
+    }
+    assert.ok(largestRead <= 24, 'Reading precision must not decode pixel chunks');
+  } finally {
+    globalThis.atob = originalAtob;
+  }
 });

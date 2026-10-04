@@ -1,4 +1,5 @@
 import { decode, encode } from 'fast-png';
+import { dataURLByteRange } from './image-bytes.ts';
 import { crc32, extractExif } from './exif-export.ts';
 import {
   D50_D65,
@@ -45,6 +46,35 @@ export function pngInfo(bytes: Uint8Array) {
     h = c.get('IHDR'),
     p = c.get('cICP');
   return { depth: h?.[8] || 8, hdr: !!p && (p[1] === 16 || p[1] === 18) };
+}
+/** IDAT is skipped: checking precision must not allocate the whole working PNG. */
+export function pngDataURLInfo(src: string) {
+  const offset = src.indexOf(',') + 1;
+  const padding = src.endsWith('==') ? 2 : src.endsWith('=') ? 1 : 0;
+  const length = ((src.length - offset) / 4) * 3 - padding;
+  const signature = dataURLByteRange(src, 0, 8);
+  if (signature.length !== 8 || ascii(signature, 1, 3) !== 'PNG')
+    throw Error('PNG 헤더가 없습니다.');
+  let depth = 8,
+    cicp: Uint8Array | undefined;
+  for (let at = 8; at < length;) {
+    const header = dataURLByteRange(src, at, at + 8);
+    if (header.length !== 8) throw Error('PNG 청크가 잘렸습니다.');
+    const size = new DataView(header.buffer).getUint32(0);
+    const kind = ascii(header, 4, 4);
+    if (at + size + 12 > length) throw Error('PNG 청크가 잘렸습니다.');
+    if (kind === 'IHDR') {
+      if (size !== 13) throw Error('PNG 헤더가 올바르지 않습니다.');
+      depth = dataURLByteRange(src, at + 16, at + 17)[0];
+    }
+    if (kind === 'cICP') {
+      if (size !== 4) throw Error('PNG 색상 정보가 올바르지 않습니다.');
+      cicp = dataURLByteRange(src, at + 8, at + 12);
+    }
+    if (kind === 'IEND') break;
+    at += size + 12;
+  }
+  return { depth, hdr: !!cicp && (cicp[1] === 16 || cicp[1] === 18), cicp };
 }
 function profileMatrix(icc: Uint8Array) {
   const v = new DataView(icc.buffer, icc.byteOffset, icc.byteLength);

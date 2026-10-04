@@ -4,7 +4,7 @@
 
 ## 바로 실행
 
-Windows x64에서는 `release/Hinana-Studio-Image-0.12.1-Windows-x64-Setup.exe`로 설치합니다. 설치 위치를 선택할 수 있고, 시작 메뉴/바탕화면 바로가기를 만듭니다.
+Windows x64에서는 `release/Hinana-Studio-Image-0.12.2-Windows-x64-Setup.exe`로 설치합니다. 설치 위치를 선택할 수 있고, 시작 메뉴/바탕화면 바로가기를 만듭니다.
 
 macOS Apple Silicon용 빌드가 있으면 `release/mac-arm64/Hinana Studio Image.app`을 실행합니다.
 
@@ -230,7 +230,7 @@ https://images.unsplash.com/photo-1464822759023-fed622ff2c3b
 
 Capacitor 8 기반 모바일 앱 프로젝트는 `ios/`와 `android/`에 있습니다. 사진·편집·프리셋 하단 도구와 세로/가로 화면, 노치 여백을 지원합니다. JPEG/PNG/WebP 사진, 기본 보정·색상·피부 보정·브러시/선형/원형 마스크·EXIF 표시·프로젝트 저장/열기를 재사용합니다. 내보내기와 `.hinanaimage` 저장은 OS 공유 창에서 저장 위치나 대상 앱을 선택합니다. 공유 창을 취소하면 파일이 외부에 저장되지 않습니다. 앱 내 작업은 IndexedDB에 자동 저장되므로 중요한 작업은 프로젝트로도 내보내세요.
 
-iPhone은 Core Image로 HEIC·RAW·ProRAW 원본을 최대 32MP까지 현상합니다. iOS 17 이상에서는 HDR 게인맵을 확장해 16비트 PQ 작업 이미지로 유지하고, HDR 사진을 HDR 편집 모드로 자동 불러옵니다. Apple Vision 피사체 선택과 기존 브러시 추가·지우기도 연결했습니다. 파일 앱과 사진 보관함 중 원본을 가져올 곳을 선택할 수 있습니다. 카메라·GPS EXIF는 작업 이미지에 유지합니다.
+iPhone은 Core Image로 HEIC·RAW·ProRAW 원본을 최대 32MP까지 현상합니다. iOS 17 이상에서는 HDR 게인맵을 확장해 16비트 PQ 작업 이미지로 유지하고, HDR 사진을 HDR 편집 모드로 자동 불러옵니다. Apple Vision 피사체 선택과 기존 브러시 추가·지우기도 연결했습니다. 파일 앱과 사진 보관함 중 원본을 가져올 곳을 선택할 수 있습니다. 카메라·GPS EXIF는 작업 이미지에 유지합니다. 큰 16비트/PQ PNG를 WebView가 읽지 못하는 경우를 피하도록 동일 해상도의 JPEG 표시 이미지를 함께 저장합니다. 고정밀 보정과 출력은 원본 작업 PNG를 사용합니다.
 
 HDR 편집의 WebView 미리보기 지원은 기기에 따라 다릅니다. iOS 17 이상에서는 ‘HDR 화면 보기 · iPhone’ 버튼으로 보정 결과를 Apple 네이티브 HDR 화면에서 확대해 볼 수 있습니다. SDR 사진을 HDR 모드로 바꾸는 것만으로 밝기가 늘어나지는 않으며, HDR 하이라이트 확장으로 조절합니다. 실제 화면 밝기는 디스플레이·OS 설정에 따라 달라집니다. Android의 RAW·HEIC 해독과 AI 피사체 선택은 아직 연결되지 않았습니다.
 

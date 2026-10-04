@@ -5,6 +5,7 @@ export type Photo = {
   id: string;
   name: string;
   src: string;
+  nativePreview?: string;
   width: number;
   height: number;
   rating: number;
@@ -94,6 +95,13 @@ export function validateProject(value: unknown): Project {
         !/^data:application\/octet-stream;base64,[A-Za-z0-9+/]*={0,2}$/.test(photo.rawSource))
     )
       throw new Error('프로젝트의 RAW 원본 데이터가 올바르지 않습니다.');
+    if (
+      photo.nativePreview !== undefined &&
+      (typeof photo.nativePreview !== 'string' ||
+        photo.nativePreview.length > 112_000_000 ||
+        !/^data:image\/jpeg;base64,[A-Za-z0-9+/]*={0,2}$/.test(photo.nativePreview))
+    )
+      throw new Error('프로젝트의 표시 이미지가 올바르지 않습니다.');
     ids.add(photo.id);
     const a = { ...defaults, ...photo.adjustments };
     if (!['srgb', 'display-p3'].includes(a.colorSpace))
