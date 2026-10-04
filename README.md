@@ -65,10 +65,11 @@ Electron 실행 파일이 없다는 오류가 나면 `node node_modules/electron
 
 - 새 사진은 **32비트 부동소수점** 처리로 편집합니다(최대 32MP). 노출, 톤, HSL, 피부 보정, 자르기·회전과 출력까지 중간 8비트 양자화를 피합니다. 화면 표시 정밀도와 파일 저장 정밀도는 별개입니다.
 - 색상 관리에서 **편집 정밀도 → 32비트**, **밝기 범위 → HDR**를 선택합니다. 최대 밝기는 400 / 1,000 / 2,000 / 4,000 nit, 기준 흰색은 203 nit입니다. HDR의 흰색을 넘는 값을 유지하며 편집합니다.
+- SDR 사진을 HDR로 전환하거나 최대 밝기를 높이는 것만으로 밝기를 자동 확장하지 않습니다. **HDR 밝은 영역 확장**(0–100%)으로 밝은 영역을 출력 상한까지 확장할 수 있습니다. 중간톤은 유지하며 기존 사진에 없던 세부 정보를 복원하지는 않습니다. 이 값은 프로젝트·실행 취소·HDR 출력에 저장되고 SDR 편집에서는 적용되지 않습니다.
 - **16비트 SDR PNG**는 sRGB/Display P3 ICC를, **16비트 HDR PNG**는 BT.2100 PQ / Rec.2020 cICP를 포함합니다. 두 형식 모두 EXIF 보존 옵션을 지원합니다. JPEG·일반 PNG·WebP는 기존 8비트 SDR 출력이며 HDR 편집 결과는 SDR로 톤 매핑합니다.
 - 16비트 PNG는 원본 샘플을 직접 읽습니다. RGB 매트릭스/TRC ICC, sRGB/P3, PQ Rec.2020 PNG 입력과 EXIF 방향을 지원합니다. LUT ICC, HLG, TIFF, EXR, AVIF/JPEG gain map, 노출 브래킷 병합은 지원하지 않습니다. 지원하지 않는 고정밀 프로파일은 오류로 알립니다.
 - macOS Core Image와 Windows LibRaw는 **16비트 Display P3 PNG**로 RAW를 현상합니다. 예전 프로젝트는 **RAW 원본에서 16비트 P3 다시 현상**으로 갱신합니다. 이는 현상된 RGB 편집이며 센서 선형 RAW의 하이라이트 복원·화이트밸런스 재현상과는 구별됩니다. 8비트 원본을 바꾼다고 이미 잃은 정보가 복구되지는 않습니다.
-- HDR 화면과 Chromium HDR Canvas 지원이 감지되면 float16 HDR 미리보기를 사용합니다. 그 외에는 SDR 변환 미리보기를 표시하면서 HDR 데이터는 유지합니다. 전용 `CanvasHDR` 기능만 활성화하며 실험적인 브라우저 API이므로 기기·OS HDR 설정에 따라 표시가 다릅니다. 실제 화면의 절대 밝기를 보장하지 않습니다.
+- HDR 화면과 WebGPU HDR 설정 지원이 감지되면 rgba16float / extended HDR 미리보기를 사용합니다. 지원되는 환경에서는 Canvas 2D의 float16 / extended 경로도 사용할 수 있습니다. 그 외에는 SDR 변환 미리보기를 표시하면서 HDR 데이터는 유지합니다. 기기·OS HDR 설정과 WebView의 GPU 지원에 따라 표시가 다릅니다. 실험적인 브라우저 기능을 강제로 활성화하지 않습니다. 실제 화면의 절대 밝기를 보장하지 않습니다.
 - 기존 프로젝트는 기존 8비트 처리 결과를 유지합니다. 고정밀 모드 전환은 실행 취소할 수 있습니다. 새 프로젝트 파일은 **형식 버전 2**이므로 v0.8.0 이상에서 열어야 합니다. v1 프로젝트도 계속 열 수 있습니다.
 - 16비트/HDR/새 RAW는 32MP 이하, 일반 8비트 경로는 60MP 이하입니다. 고정밀 데이터는 메모리 사용량이 크며, 일반 이미지 입력 80MB / RAW 120MB / 프로젝트 열기 512MB 제한은 유지됩니다.
 
@@ -245,3 +246,5 @@ iOS는 Capacitor 8의 Xcode 환경과 Apple 서명 팀을 설정해야 실제 iP
 GitHub Actions의 `Mobile apps` 워크플로가 Android APK, 서명 없는 iOS 시뮬레이터 앱을 빌드합니다. 모바일 화면 편집 테스트는 개발 서버 실행 후 `node tests/mobile-smoke.mjs`로 수행합니다. 브라우저 테스트가 실제 OS의 파일 선택기·공유 창 검증을 대신하지는 않습니다.
 
 공식 문서: [개발 환경](https://capacitorjs.com/docs/getting-started/environment-setup), [공유](https://capacitorjs.com/docs/apis/share), [파일 저장](https://capacitorjs.com/docs/apis/filesystem).
+
+모든 선택 메뉴는 앱의 어두운 테마에 맞춘 목록으로 표시하며 터치와 키보드 조작을 지원합니다. HDR 화면 미리보기는 WebGPU의 rgba16float / extended 설정(또는 Canvas 2D의 실제 float16 픽셀 보존과 extended 설정)과 화면의 HDR 신호를 함께 확인합니다. 지원되지 않는 WebView에서는 SDR 미리보기라는 안내를 표시합니다. HDR 파일을 출력할 수 있는 것과 기기 화면에서 HDR 밝기를 표시할 수 있는 것은 별개입니다.

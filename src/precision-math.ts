@@ -53,6 +53,23 @@ export const encoded = (x: number) =>
   Math.sign(x) *
   (Math.abs(x) <= 0.0031308 ? Math.abs(x) * 12.92 : 1.055 * Math.abs(x) ** (1 / 2.4) - 0.055);
 export const SDR_WHITE = 203;
+/** Explicit creative SDR highlight expansion. Black/midtones stay anchored; RGB ratios stay intact. */
+export function expandHDRHighlights(
+  r: number,
+  g: number,
+  b: number,
+  amount: number,
+  peakNits: number,
+): RGB {
+  const peak = Math.max(r, g, b);
+  if (amount <= 0 || peak <= 0.6 || peak >= peakNits / SDR_WHITE) return [r, g, b];
+  const t = Math.min(1, (peak - 0.6) / 0.4);
+  const smooth = t * t * (3 - 2 * t);
+  const limit = peakNits / SDR_WHITE;
+  const target = peak + Math.max(0, limit - peak) * (Math.min(100, amount) / 100) * smooth;
+  const gain = target / peak;
+  return [r * gain, g * gain, b * gain];
+}
 const m1 = 2610 / 16384,
   m2 = 2523 / 32,
   c1 = 3424 / 4096,

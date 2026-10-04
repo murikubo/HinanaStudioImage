@@ -2115,3 +2115,108 @@ input[type='range']:disabled {
     grid-column: 1 / -1;
   }
 }
+
+.app-select {
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  min-width: 0;
+  width: 100%;
+}
+.app-select-native {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+.app-select-face {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid #414a43;
+  border-radius: 6px;
+  background: #1b211e;
+  color: #d1dfb7;
+  font-size: 12px;
+  pointer-events: none;
+}
+.app-select-face svg {
+  flex-shrink: 0;
+  color: #98a68c;
+}
+.app-select-native:focus-visible + .app-select-face {
+  outline: 2px solid #c8dba9;
+  outline-offset: 2px;
+}
+.app-select.disabled {
+  opacity: 0.45;
+}
+.app-select-options {
+  -webkit-tap-highlight-color: transparent;
+  position: fixed;
+  z-index: 10000;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #232a25;
+  border: 1px solid #63765a;
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 12px 42px #0009;
+}
+.app-select-options button {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  text-align: left;
+  gap: 12px;
+  font-size: 14px;
+  border-radius: 6px;
+  color: #dce4d7;
+}
+.app-select-options button[aria-selected='true'] {
+  color: #d3e8b7;
+  background: #c8dba91a;
+}
+.app-select-options button:focus-visible {
+  outline: 2px solid #c8dba9;
+  outline-offset: -2px;
+}
+.app-select-options button:disabled {
+  opacity: 0.4;
+}
+.viewer-toolbar .app-select {
+  -webkit-tap-highlight-color: transparent;
+  width: 78px;
+  flex-shrink: 0;
+}
+.viewer-toolbar .app-select-face {
+  border: 0;
+  background: transparent;
+  padding: 4px 6px;
+}
+@media (max-width: 900px), (max-width: 1100px) and (pointer: coarse) {
+  .app-select-face {
+    min-height: 42px;
+    font-size: 14px;
+  }
+}
+.color-management > label.hdr-expansion {
+  display: block;
+}
+.hdr-expansion > span {
+  display: flex;
+  justify-content: space-between;
+  margin: 10px 0;
+}
+.hdr-expansion output {
+  color: #d1dfb7;
+}
+.hdr-expansion input {
+  width: 100%;
+}

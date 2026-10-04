@@ -1,3 +1,4 @@
+import Select from './Select';
 import { nativeMobile, saveFile } from './mobile';
 import { selectSubject } from './subject-client';
 import type { LocalMask, MaskPoint, SubjectTool } from './local-masks';
@@ -7,6 +8,7 @@ import {
   paintFloat,
   precisionSourceInfo,
   hdrCanvasSupported,
+  prepareHDRSupport,
 } from './precision-client';
 import { tagOutput } from './icc';
 import {
@@ -206,6 +208,7 @@ function App() {
     [],
   );
   const [hdrDisplay, setHdrDisplay] = useState(() => matchMedia('(dynamic-range: high)').matches);
+  const [hdrReady, setHDRReady] = useState(false);
   useEffect(() => {
     const q = matchMedia('(dynamic-range: high)');
     const update = () => setHdrDisplay(q.matches);
@@ -238,6 +241,19 @@ function App() {
       : saveMessage;
   const active = photos.find((p) => p.id === selected),
     a = active?.adjustments || defaults;
+  useEffect(() => {
+    if (!hdrDisplay || a.dynamicRange !== 'hdr' || a.precision !== 'float') return;
+    let cancelled = false;
+    const update = () => {
+      if (!cancelled) setHDRReady(hdrCanvasSupported());
+    };
+    void prepareHDRSupport().then(update);
+    window.addEventListener('hinana-hdr-capability-change', update);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('hinana-hdr-capability-change', update);
+    };
+  }, [hdrDisplay, a.dynamicRange, a.precision]);
   useEffect(() => {
     if (a.precision !== 'float' && (format === 'png16' || format === 'hdr-png')) setFormat('png');
     else if (a.dynamicRange !== 'hdr' && format === 'hdr-png') setFormat('png16');
@@ -312,6 +328,7 @@ function App() {
               precision: a.precision,
               dynamicRange: a.dynamicRange,
               hdrPeak: a.hdrPeak,
+              hdrHighlights: 0,
               rotation: a.rotation,
               flip: a.flip,
               crop: a.crop,
@@ -364,7 +381,7 @@ function App() {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [active, a, compare, view, zoom, proofSRGB, proofSDR, hdrDisplay, notify]);
+  }, [active, a, compare, view, zoom, proofSRGB, proofSDR, hdrDisplay, hdrReady, notify]);
   function change(values: Partial<Adjustments>, commit = false) {
     setPhotos((current) =>
       current.map((p) => {
@@ -1055,6 +1072,7 @@ function App() {
                     precision: a.precision,
                     dynamicRange: a.dynamicRange,
                     hdrPeak: a.hdrPeak,
+                    hdrHighlights: a.hdrHighlights,
                     ...p.values,
                     masks: a.masks,
                     skinSmooth: a.skinSmooth,
@@ -1189,7 +1207,7 @@ function App() {
                 style={zoom ? { width: `${(dimensions[0] * zoom) / 100}px`, flexShrink: 0 } : {}}
               >
                 <canvas
-                  key={`${selected}-${proofSRGB ? 'srgb' : a.colorSpace}-${a.precision}-${a.dynamicRange}-${proofSDR}-${hdrDisplay}`}
+                  key={`${selected}-${proofSRGB ? 'srgb' : a.colorSpace}-${a.precision}-${a.dynamicRange}-${proofSDR}-${hdrDisplay}-${hdrReady}`}
                   ref={canvas}
                   aria-label="보정 사진 미리보기"
                 />
@@ -1280,7 +1298,7 @@ function App() {
                 <button className="icon-button" title="화면에 맞추기" onClick={() => setZoom(0)}>
                   <Maximize size={15} />
                 </button>
-                <select
+                <Select
                   aria-label="미리보기 배율"
                   value={zoom}
                   onChange={(e) => setZoom(Number(e.target.value))}
@@ -1289,7 +1307,7 @@ function App() {
                   <option value={50}>50%</option>
                   <option value={100}>100%</option>
                   <option value={150}>150%</option>
-                </select>
+                </Select>
                 <ZoomIn size={15} />
               </div>
             </div>
@@ -1452,7 +1470,7 @@ function App() {
             <section className="color-management" aria-label="색상 관리">
               <label>
                 편집 정밀도
-                <select
+                <Select
                   aria-label="편집 정밀도"
                   value={a.precision}
                   disabled={!active || compare || !!busy || subjectBusy}
@@ -1473,11 +1491,11 @@ function App() {
                   >
                     32비트 부동소수점
                   </option>
-                </select>
+                </Select>
               </label>
               <label>
                 밝기 범위
-                <select
+                <Select
                   aria-label="밝기 범위"
                   value={a.dynamicRange}
                   disabled={!active || compare || !!busy || a.precision !== 'float'}
@@ -1485,13 +1503,13 @@ function App() {
                 >
                   <option value="sdr">SDR</option>
                   <option value="hdr">HDR</option>
-                </select>
+                </Select>
               </label>
               {a.dynamicRange === 'hdr' && (
                 <>
                   <label>
                     HDR 최대 밝기
-                    <select
+                    <Select
                       aria-label="HDR 최대 밝기"
                       value={a.hdrPeak}
                       disabled={compare || !!busy}
@@ -1502,8 +1520,29 @@ function App() {
                           {n} nit
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
+                  <label className="hdr-expansion">
+                    <span>
+                      HDR 밝은 영역 확장 <output>{a.hdrHighlights}%</output>
+                    </span>
+                    <input
+                      type="range"
+                      aria-label="HDR 밝은 영역 확장"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={a.hdrHighlights}
+                      disabled={compare || !!busy}
+                      onChange={(e) => change({ hdrHighlights: Number(e.target.value) })}
+                      onPointerUp={() => change({}, true)}
+                      onKeyUp={() => change({}, true)}
+                    />
+                  </label>
+                  <p>
+                    HDR 전환은 밝기를 자동으로 높이지 않습니다. SDR 사진의 밝은 영역을 확장하려면 이
+                    값을 올리세요. 최대 밝기는 출력 상한입니다.
+                  </p>
                   <label className="proof-option">
                     <input
                       type="checkbox"
@@ -1515,7 +1554,11 @@ function App() {
                   <p>
                     {hdrDisplay && hdrCanvasSupported() && !proofSDR && !proofSRGB
                       ? 'HDR 화면 미리보기 · 기준 흰색 203 nit'
-                      : 'SDR 변환 미리보기 · HDR 데이터는 유지됩니다.'}
+                      : proofSDR || proofSRGB
+                        ? 'SDR 변환 미리보기 사용 중 · HDR 데이터는 유지됩니다.'
+                        : !hdrDisplay
+                          ? '현재 화면에서 HDR 표시가 감지되지 않았습니다. SDR 미리보기이며 HDR 파일 출력은 가능합니다.'
+                          : '이 앱 실행 환경은 HDR 화면 표시를 지원하지 않습니다. SDR 미리보기이며 HDR 파일 출력은 가능합니다.'}
                   </p>
                 </>
               )}
@@ -1527,7 +1570,7 @@ function App() {
 
               <label>
                 작업 색공간
-                <select
+                <Select
                   aria-label="작업 색공간"
                   value={a.colorSpace}
                   disabled={!active || compare || !!busy || subjectBusy}
@@ -1540,7 +1583,7 @@ function App() {
                   <option value="display-p3" disabled={!p3Supported}>
                     Display P3
                   </option>
-                </select>
+                </Select>
               </label>
               <p>
                 {a.colorSpace === 'display-p3'
@@ -1788,7 +1831,7 @@ function App() {
             <p>보정이 적용된 새로운 이미지로 저장합니다.</p>
             <label>
               파일 형식
-              <select
+              <Select
                 aria-label="파일 형식"
                 value={format}
                 onChange={(e) => setFormat(e.target.value)}
@@ -1805,11 +1848,11 @@ function App() {
                   PNG · 16비트 HDR PQ / Rec.2020
                 </option>
                 <option value="webp">WebP · 효율적인 압축</option>
-              </select>
+              </Select>
             </label>
             <label>
               출력 색공간
-              <select
+              <Select
                 aria-label="출력 색공간"
                 disabled={format === 'hdr-png'}
                 value={format === 'hdr-png' ? 'rec2100-pq' : exportColor}
@@ -1821,11 +1864,11 @@ function App() {
                 <option value="display-p3" disabled={!p3Supported}>
                   Display P3 · 넓은 색역
                 </option>
-              </select>
+              </Select>
             </label>
             <label>
               이미지 크기
-              <select
+              <Select
                 aria-label="이미지 크기"
                 value={exportSize}
                 onChange={(e) => setExportSize(e.target.value)}
@@ -1836,7 +1879,7 @@ function App() {
                 <option value="2560">긴 변 최대 2560px</option>
                 <option value="1920">긴 변 최대 1920px</option>
                 <option value="1080">긴 변 최대 1080px</option>
-              </select>
+              </Select>
             </label>
             {!['png', 'png16', 'hdr-png'].includes(format) && (
               <label>

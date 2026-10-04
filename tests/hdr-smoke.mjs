@@ -48,29 +48,19 @@ async function exportFile(format) {
 }
 try {
   await page.waitForSelector('.welcome');
-  const capability = await page.evaluate(() => {
+  const capability = await page.evaluate(async () => {
+    const adapter = await navigator.gpu.requestAdapter();
+    const device = await adapter.requestDevice();
     const c = document.createElement('canvas');
-    c.configureHighDynamicRange({ mode: 'extended' });
-    const x = c.getContext('2d', { colorSpace: 'display-p3', colorType: 'float16' });
-    x.putImageData(
-      new ImageData(new Float16Array([2, 1.25, 0.5, 1]), 1, 1, {
-        colorSpace: 'display-p3',
-        pixelFormat: 'rgba-float16',
-      }),
-      0,
-      0,
-    );
-    return {
-      attributes: x.getContextAttributes(),
-      pixel: [
-        ...x.getImageData(0, 0, 1, 1, { colorSpace: 'display-p3', pixelFormat: 'rgba-float16' })
-          .data,
-      ],
-    };
+    const x = c.getContext('webgpu');
+    x.configure({ device, format: 'rgba16float', toneMapping: { mode: 'extended' } });
+    const configuration = x.getConfiguration();
+    x.unconfigure();
+    device.destroy();
+    return { format: configuration.format, mode: configuration.toneMapping.mode };
   });
-  assert.equal(capability.attributes.colorType, 'float16');
-  assert.equal(capability.pixel[0], 2);
-  console.log('HDR Canvas capability:', capability);
+  assert.deepEqual(capability, { format: 'rgba16float', mode: 'extended' });
+  console.log('HDR WebGPU capability:', capability);
   const data = new Uint16Array(1024 * 128 * 4);
   for (let i = 0; i < 1024 * 128; i++) {
     const n = (i % 1024) * 64;
@@ -116,6 +106,37 @@ try {
   // Force only the display capability signal to exercise our HDR canvas path.
   // This verifies pixel transport, not the physical panel's luminance.
   await page.addInitScript(() => {
+    // Read the rendered swapchain before presentation; physical luminance is not mocked.
+    new MutationObserver(() => {
+      const canvas = document.querySelector('.canvas-holder canvas');
+      if (
+        !canvas ||
+        canvas.dataset.hdrBackend !== 'webgpu' ||
+        canvas.getAttribute('aria-busy') !== 'false' ||
+        window.__hdrReading
+      )
+        return;
+      window.__hdrReading = true;
+      const context = canvas.getContext('webgpu');
+      const { device, format, toneMapping } = context.getConfiguration();
+      window.__hdrConfiguration = { format, mode: toneMapping.mode };
+      const buffer = device.createBuffer({
+        size: 256,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+      });
+      const commands = device.createCommandEncoder();
+      commands.copyTextureToBuffer(
+        { texture: context.getCurrentTexture(), origin: [1023, 0] },
+        { buffer, bytesPerRow: 256 },
+        [1, 1],
+      );
+      device.queue.submit([commands.finish()]);
+      void buffer.mapAsync(GPUMapMode.READ).then(() => {
+        window.__hdrPixel = new Float16Array(buffer.getMappedRange())[0];
+        buffer.unmap();
+        buffer.destroy();
+      });
+    }).observe(document, { subtree: true, attributes: true });
     const original = window.matchMedia.bind(window);
     window.matchMedia = (query) => {
       const result = original(query);
@@ -125,35 +146,36 @@ try {
     };
   });
   await page.reload();
-  await page.waitForFunction(() => {
-    const c = document.querySelector('.canvas-holder canvas');
-    return c?.width === 1024 && c.getContext('2d').getContextAttributes().colorType === 'float16';
+  await page.waitForFunction(() => typeof window.__hdrPixel === 'number');
+  const hdrPixel = await page.evaluate(() => window.__hdrPixel);
+  assert.deepEqual(await page.evaluate(() => window.__hdrConfiguration), {
+    format: 'rgba16float',
+    mode: 'extended',
   });
-  const hdrPixel = await page
+  assert.ok(hdrPixel > 1.5, `HDR rendered pixel: ${hdrPixel}`);
+  // A lost GPU device must recreate the canvas and keep the edited photo visible in SDR.
+  await page
     .locator('.canvas-holder canvas')
-    .evaluate(
-      (c) =>
-        c
-          .getContext('2d')
-          .getImageData(1023, 0, 1, 1, { colorSpace: 'display-p3', pixelFormat: 'rgba-float16' })
-          .data[0],
-    );
-  assert.ok(hdrPixel > 1.5);
+    .evaluate((c) => c.getContext('webgpu').getConfiguration().device.destroy());
+  await page.waitForFunction(
+    () => document.querySelector('.canvas-holder canvas')?.dataset.hdrBackend === 'sdr',
+  );
+  await page
+    .getByText('이 앱 실행 환경은 HDR 화면 표시를 지원하지 않습니다.', { exact: false })
+    .waitFor();
   await page.getByLabel('SDR 밝기 변환 미리보기', { exact: true }).check();
   await page.waitForFunction(
-    () =>
-      document.querySelector('.canvas-holder canvas')?.getContext('2d').getContextAttributes()
-        .colorType === 'unorm8',
+    () => document.querySelector('.canvas-holder canvas')?.dataset.hdrBackend === 'sdr',
   );
   const hdrPath = path.join(root, 'reopened.png');
   await fs.writeFile(hdrPath, hdr);
   await page.locator('input[multiple]').setInputFiles(hdrPath);
   await page.waitForTimeout(600);
   assert.equal(await page.getByLabel('밝기 범위', { exact: true }).inputValue(), 'hdr');
-  await page.screenshot({ path: 'docs/hdr-editing.png' });
+  await page.screenshot({ path: path.join(root, 'hdr-editing.png') });
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: float16 canvas, 16-bit input/output levels, ICC/EXIF, HDR PQ export/reimport and project persistence',
+    'PASS: WebGPU rgba16float extended presentation and rendered HDR pixel, 16-bit input/output levels, ICC/EXIF, HDR PQ export/reimport and project persistence',
   );
 } finally {
   await app.close();

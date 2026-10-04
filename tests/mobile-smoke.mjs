@@ -42,6 +42,49 @@ for (const [name, engine] of [
       before,
     );
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    // Touch opens our app listbox, including on WebKit, rather than the system picker.
+    await page.getByLabel('편집 정밀도', { exact: true }).tap();
+    await page.getByRole('listbox').waitFor();
+    await page
+      .getByRole('listbox')
+      .getByRole('option', { name: '32비트 부동소수점', exact: true })
+      .tap();
+    assert.equal(await page.getByLabel('편집 정밀도', { exact: true }).inputValue(), 'float');
+    await page.getByLabel('밝기 범위', { exact: true }).tap();
+    await page.getByRole('listbox').getByRole('option', { name: 'HDR', exact: true }).tap();
+    await page.getByLabel('HDR 최대 밝기', { exact: true }).tap();
+    await page.getByRole('listbox').getByRole('option', { name: '2000 nit', exact: true }).tap();
+    assert.equal(await page.getByLabel('HDR 최대 밝기', { exact: true }).inputValue(), '2000');
+    await page.getByLabel('HDR 최대 밝기', { exact: true }).focus();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Enter');
+    assert.equal(await page.getByLabel('HDR 최대 밝기', { exact: true }).inputValue(), '1000');
+    await page.getByLabel('HDR 최대 밝기', { exact: true }).tap();
+    const box = await page.getByRole('listbox').boundingBox();
+    assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= 390 && box.y + box.height <= 844);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.getByRole('listbox').count(), 0);
+    // Compare SDR proof pixels; WebGPU presentation is tested separately on Electron.
+    await page.getByLabel('SDR 밝기 변환 미리보기', { exact: true }).check();
+    await page.locator('canvas[aria-busy="false"]').first().waitFor();
+    const sdrPreview = await page
+      .locator('canvas')
+      .first()
+      .evaluate((c) => c.toDataURL());
+    await page.getByLabel('HDR 밝은 영역 확장', { exact: true }).evaluate((input) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '75');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await page.getByLabel('HDR 밝은 영역 확장', { exact: true }).dispatchEvent('pointerup');
+    await page.waitForFunction(
+      (before) => document.querySelector('canvas')?.toDataURL() !== before,
+      sdrPreview,
+      { timeout: 30000 },
+    );
+    await page
+      .getByText('SDR 변환 미리보기 사용 중 · HDR 데이터는 유지됩니다.', { exact: true })
+      .waitFor();
     await page.screenshot({ path: `/tmp/hinana-mobile-${name}.png` });
     await page
       .getByLabel('모바일 작업 도구')
@@ -68,6 +111,7 @@ for (const [name, engine] of [
     const p = JSON.parse(await fs.readFile(await file.path(), 'utf8'));
     assert.equal(p.photos.length, 1);
     assert.equal(p.photos[0].adjustments.masks.length, 1);
+    assert.equal(p.photos[0].adjustments.hdrHighlights, 75);
     await page.setViewportSize({ width: 956, height: 440 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     assert.deepEqual(errors, []);

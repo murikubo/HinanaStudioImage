@@ -1,7 +1,14 @@
 import { applyLocalMasks } from './local-masks.ts';
 import { adjustPixels, outputSize, type Adjustments } from './engine.ts';
 import { type FloatFrame } from './precision-codec.ts';
-import { P3_SRGB, SRGB_P3, transform, linear, encoded } from './precision-math.ts';
+import {
+  P3_SRGB,
+  SRGB_P3,
+  transform,
+  linear,
+  encoded,
+  expandHDRHighlights,
+} from './precision-math.ts';
 /** Linear-light geometry, alpha-aware bilinear resampling, then unquantized edits. */
 export function renderFloat(source: FloatFrame, a: Adjustments, maxSide: number): FloatFrame {
   const [cw, ch] = outputSize(source.width, source.height, a),
@@ -73,5 +80,19 @@ export function renderFloat(source: FloatFrame, a: Adjustments, maxSide: number)
     a.colorSpace,
     true,
   );
+  if (a.dynamicRange === 'hdr' && a.hdrHighlights > 0) {
+    for (let i = 0; i < data.length; i += 4) {
+      const rgb = expandHDRHighlights(
+        data[i],
+        data[i + 1],
+        data[i + 2],
+        a.hdrHighlights,
+        a.hdrPeak,
+      );
+      data[i] = rgb[0];
+      data[i + 1] = rgb[1];
+      data[i + 2] = rgb[2];
+    }
+  }
   return { width, height, data, colorSpace: a.colorSpace, hdr: a.dynamicRange === 'hdr' };
 }

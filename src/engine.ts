@@ -8,6 +8,7 @@ export type Adjustments = ColorAdjustments & {
   precision: 'legacy' | 'float';
   dynamicRange: 'sdr' | 'hdr';
   hdrPeak: number;
+  hdrHighlights: number;
   skinSmooth: number;
   skinRedness: number;
   skinBrightness: number;
@@ -34,6 +35,7 @@ export const defaults: Adjustments = {
   precision: 'legacy',
   dynamicRange: 'sdr',
   hdrPeak: 1000,
+  hdrHighlights: 0,
   skinSmooth: 0,
   skinRedness: 0,
   skinBrightness: 0,

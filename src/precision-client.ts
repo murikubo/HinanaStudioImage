@@ -1,3 +1,4 @@
+import { gpuHDRSupported, paintGPUHDR, prepareGPUHDR } from './hdr-gpu';
 import { dataURLBytes } from './image-bytes.ts';
 import type { Adjustments } from './engine';
 import { colorContext, type WorkingColorSpace } from './color-space';
@@ -108,29 +109,44 @@ export async function requestPrecision(
   }
 }
 let hdrSupport: boolean | undefined;
-export function hdrCanvasSupported() {
+export const prepareHDRSupport = prepareGPUHDR;
+function hdr2DSupported() {
   if (hdrSupport !== undefined) return hdrSupport;
   try {
-    const c = document.createElement('canvas') as HDRCanvas;
-    if (
-      !c.configureHighDynamicRange ||
-      typeof (globalThis as unknown as { Float16Array?: unknown }).Float16Array !== 'function'
-    )
+    const c = document.createElement('canvas');
+    if (typeof (globalThis as unknown as { Float16Array?: unknown }).Float16Array !== 'function')
       return (hdrSupport = false);
-    c.configureHighDynamicRange({ mode: 'extended' });
     const ctx = c.getContext('2d', {
       colorSpace: 'display-p3',
       colorType: 'float16',
+      toneMapping: { mode: 'extended' },
     } as CanvasRenderingContext2DSettings);
-    return (hdrSupport =
-      (ctx?.getContextAttributes() as { colorType?: string })?.colorType === 'float16');
+    const attributes = ctx?.getContextAttributes() as
+      { colorType?: string; toneMapping?: { mode?: string } } | undefined;
+    if (attributes?.colorType !== 'float16' || attributes.toneMapping?.mode !== 'extended')
+      return (hdrSupport = false);
+    const Half = (globalThis as unknown as { Float16Array: new (values: number[]) => Float32Array })
+      .Float16Array;
+    ctx!.putImageData(
+      new ImageData(new Half([2, 2, 2, 1]) as unknown as Uint8ClampedArray<ArrayBuffer>, 1, 1, {
+        colorSpace: 'display-p3',
+        pixelFormat: 'rgba-float16',
+      } as ImageDataSettings),
+      0,
+      0,
+    );
+    const pixel = ctx!.getImageData(0, 0, 1, 1, {
+      colorSpace: 'display-p3',
+      pixelFormat: 'rgba-float16',
+    } as ImageDataSettings).data[0];
+    return (hdrSupport = pixel > 1);
   } catch {
     return (hdrSupport = false);
   }
 }
-type HDRCanvas = HTMLCanvasElement & {
-  configureHighDynamicRange?: (options: { mode: 'extended' }) => void;
-};
+export function hdrCanvasSupported() {
+  return gpuHDRSupported() || hdr2DSupported();
+}
 export function paintFloat(
   frame: FloatFrame,
   canvas: HTMLCanvasElement,
@@ -141,17 +157,25 @@ export function paintFloat(
   canvas.width = frame.width;
   canvas.height = frame.height;
   const activeHDR = hdr && hdrCanvasSupported();
-  if (activeHDR) (canvas as HDRCanvas).configureHighDynamicRange?.({ mode: 'extended' });
-  const ctx = canvas.getContext('2d', {
-    colorSpace: output,
-    colorType: activeHDR ? 'float16' : 'unorm8',
-    willReadFrequently: true,
-  } as CanvasRenderingContext2DSettings)!;
+  const gpu = activeHDR && gpuHDRSupported();
+  const ctx = gpu
+    ? undefined
+    : canvas.getContext('2d', {
+        colorSpace: output,
+        colorType: activeHDR ? 'float16' : 'unorm8',
+        toneMapping: { mode: activeHDR ? 'extended' : 'standard' },
+        // HDR is presented to the compositor; do not force a CPU readback-optimized canvas.
+        willReadFrequently: !activeHDR,
+      } as CanvasRenderingContext2DSettings)!;
   const matrix = output === frame.colorSpace ? undefined : output === 'srgb' ? P3_SRGB : SRGB_P3;
   const preview = new Uint8ClampedArray(frame.data.length);
   const Half = (globalThis as unknown as { Float16Array: new (length: number) => Float32Array })
     .Float16Array;
-  const pixels = activeHDR ? new Half(frame.data.length) : preview;
+  const pixels = gpu
+    ? new Float32Array(frame.data.length)
+    : activeHDR
+      ? new Half(frame.data.length)
+      : preview;
   for (let i = 0; i < pixels.length; i += 4) {
     let [r, g, b] = matrix
       ? transform(matrix, frame.data[i], frame.data[i + 1], frame.data[i + 2])
@@ -165,6 +189,12 @@ export function paintFloat(
     pixels[i + 3] = frame.data[i + 3] * (activeHDR ? 1 : 255);
     preview[i + 3] = frame.data[i + 3] * 255;
   }
+  if (gpu && paintGPUHDR(canvas, pixels as Float32Array, output)) return preview;
+  if (!ctx)
+    throw new Error(
+      '이 사진의 HDR 화면 표시가 GPU 제한을 초과했습니다. SDR 미리보기를 사용해 주세요.',
+    );
+  canvas.dataset.hdrBackend = activeHDR ? 'float16' : 'sdr';
   const ImageDataCtor = ImageData as unknown as new (
     data: Float32Array | Uint8ClampedArray,
     width: number,

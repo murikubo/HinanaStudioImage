@@ -4,7 +4,13 @@ import { encode, decode } from 'fast-png';
 import { decodePrecisionPNG, encodePrecisionPNG, pngChunks } from '../src/precision-codec.ts';
 import { renderFloat } from '../src/precision-engine.ts';
 import { defaults } from '../src/engine.ts';
-import { pqEncode, pqDecode } from '../src/precision-math.ts';
+import {
+  pqEncode,
+  pqDecode,
+  expandHDRHighlights,
+  transform,
+  SRGB_P3,
+} from '../src/precision-math.ts';
 test('16-bit input/edit/export retains more than 256 levels and source is immutable', () => {
   const data = new Uint16Array(4096 * 4);
   for (let i = 0; i < 4096; i++) {
@@ -104,4 +110,43 @@ test('large image data URLs decode byte-for-byte without iterable expansion', as
     Buffer.from(dataURLBytes('data:image/png;base64,' + bytes.toString('base64'))),
     bytes,
   );
+});
+
+test('SDR highlights expand explicitly into HDR, retain chroma/alpha, and survive PQ export', () => {
+  assert.deepEqual(expandHDRHighlights(1, 0.5, 0.25, 0, 1000), [1, 0.5, 0.25]);
+  assert.deepEqual(expandHDRHighlights(0.4, 0.2, 0.1, 100, 1000), [0.4, 0.2, 0.1]);
+  const source = {
+    width: 2,
+    height: 1,
+    data: new Float32Array([1, 0.5, 0.25, 0.75, 0.4, 0.2, 0.1, 1]),
+    colorSpace: 'srgb' as const,
+    hdr: false,
+  };
+  const neutral = renderFloat(
+    source,
+    { ...defaults, precision: 'float', dynamicRange: 'hdr' },
+    Infinity,
+  );
+  assert.ok(Math.abs(neutral.data[0] - 1) < 0.001);
+  const settings = {
+    ...defaults,
+    precision: 'float' as const,
+    dynamicRange: 'hdr' as const,
+    hdrPeak: 1000,
+    hdrHighlights: 100,
+  };
+  const expanded = renderFloat(source, settings, Infinity);
+  assert.ok(Math.abs(expanded.data[0] * 203 - 1000) < 0.01);
+  assert.ok(Math.abs(expanded.data[1] / expanded.data[0] - 0.5) < 0.001);
+  assert.equal(expanded.data[3], 0.75);
+  assert.ok(Math.abs(expanded.data[4] - 0.4) < 0.001);
+  const reopened = decodePrecisionPNG(encodePrecisionPNG(expanded, 'rec2100-pq', 1000));
+  assert.equal(reopened.hdr, true);
+  // PQ import converts Rec.2020 into Display P3; compare in that working space.
+  const [r, g, b] = transform(SRGB_P3, expanded.data[0], expanded.data[1], expanded.data[2]);
+  for (const [i, expected] of [r, g, b].entries())
+    assert.ok(Math.abs(reopened.data[i] - expected) < 0.003);
+  const sdr = renderFloat(source, { ...settings, dynamicRange: 'sdr' }, Infinity);
+  assert.ok(Math.abs(sdr.data[0] - 1) < 0.001);
+  assert.deepEqual(source.data, new Float32Array([1, 0.5, 0.25, 0.75, 0.4, 0.2, 0.1, 1]));
 });

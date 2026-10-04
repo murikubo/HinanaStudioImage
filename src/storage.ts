@@ -120,7 +120,7 @@ export function validateProject(value: unknown): Project {
       if (typeof a[key] === 'number' && key !== 'rotation' && key !== 'hdrPeak') {
         const limit = key === 'exposure' ? 3 : 100;
         if (
-          (key.startsWith('skin') && (a[key] as number) < 0) ||
+          ((key.startsWith('skin') || key === 'hdrHighlights') && (a[key] as number) < 0) ||
           Math.abs(a[key] as number) > limit
         )
           throw new Error('보정 값 범위를 초과했습니다.');

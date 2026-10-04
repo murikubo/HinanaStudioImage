@@ -20,8 +20,6 @@ if (primaryInstance) {
     win?.focus();
   });
 }
-// Limit the opt-in to the Canvas HDR presentation API; no broad experimental flags.
-app.commandLine.appendSwitch('enable-blink-features', 'CanvasHDR');
 function createWindow() {
   const win = new BrowserWindow({
     width: 1540,
