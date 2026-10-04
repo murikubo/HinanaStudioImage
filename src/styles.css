@@ -1836,15 +1836,17 @@ input[type='range']:disabled {
     min-width: 0;
     min-height: 0;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 92px minmax(0, 42%) minmax(0, 1fr) 62px;
+    grid-template-rows: 56px minmax(0, 1.15fr) minmax(0, 1fr) 60px;
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
   .topbar {
     grid-row: 1;
     grid-column: 1;
     padding: 8px 12px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 6px;
   }
   .brand {
@@ -1861,16 +1863,22 @@ input[type='range']:disabled {
     display: none;
   }
   .top-actions {
-    width: 100%;
-    justify-content: space-between;
-    gap: 6px;
+    width: auto;
+    justify-content: flex-end;
+    gap: 4px;
   }
   .top-actions button {
-    min-height: 36px;
+    min-height: 40px;
+    min-width: 40px;
   }
   .project-open-button {
     font-size: 11px;
     padding: 6px 8px;
+  }
+  .project-open-button > span,
+  .export-button > span,
+  .brand > div > span {
+    display: none;
   }
   .export-button {
     padding: 6px 12px;
@@ -1898,10 +1906,12 @@ input[type='range']:disabled {
     font-size: 9px;
   }
   .canvas-area {
-    padding: 6px 12px;
+    padding: 4px 8px;
+    container-type: size;
   }
-  .canvas-holder canvas {
-    max-height: 25dvh;
+  .canvas-area:not(.zoomed) .canvas-holder canvas {
+    max-width: 100cqw;
+    max-height: 100cqh;
   }
   .viewer-toolbar {
     padding: 0 6px;
@@ -2106,9 +2116,6 @@ input[type='range']:disabled {
   .mobile-navigation {
     grid-row: 3;
     grid-column: 1 / -1;
-  }
-  .canvas-holder canvas {
-    max-height: calc(100dvh - 175px);
   }
   .app[data-mobile-section='photos'] .main-panel {
     grid-row: 2;

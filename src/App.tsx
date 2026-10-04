@@ -1046,7 +1046,7 @@ function App() {
             disabled={!!busy || !ready}
             onClick={() => projectInput.current?.click()}
           >
-            <FolderOpen size={16} /> 프로젝트 열기
+            <FolderOpen size={16} /> <span>프로젝트 열기</span>
           </button>
           <button
             className="icon-button"
@@ -1070,10 +1070,11 @@ function App() {
           </button>
           <button
             className="export-button"
+            aria-label="내보내기"
             disabled={!active || !!busy}
             onClick={() => setExportOpen(true)}
           >
-            <ArrowDownToLine size={15} /> 내보내기
+            <ArrowDownToLine size={15} /> <span>내보내기</span>
           </button>
         </div>
       </header>

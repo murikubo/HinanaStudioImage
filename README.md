@@ -4,7 +4,7 @@
 
 ## 바로 실행
 
-Windows x64에서는 `release/Hinana-Studio-Image-0.12.0-Windows-x64-Setup.exe`로 설치합니다. 설치 위치를 선택할 수 있고, 시작 메뉴/바탕화면 바로가기를 만듭니다.
+Windows x64에서는 `release/Hinana-Studio-Image-0.12.1-Windows-x64-Setup.exe`로 설치합니다. 설치 위치를 선택할 수 있고, 시작 메뉴/바탕화면 바로가기를 만듭니다.
 
 macOS Apple Silicon용 빌드가 있으면 `release/mac-arm64/Hinana Studio Image.app`을 실행합니다.
 

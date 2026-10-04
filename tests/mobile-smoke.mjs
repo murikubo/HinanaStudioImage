@@ -16,10 +16,33 @@ for (const [name, engine] of [
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
+  async function checkPreviewFit() {
+    await page.locator('.canvas-holder canvas[aria-busy="false"]').waitFor();
+    const fit = await page.evaluate(() => {
+      const area = document.querySelector('.canvas-area');
+      const a = area.getBoundingClientRect();
+      const c = area.querySelector('canvas').getBoundingClientRect();
+      const style = getComputedStyle(area);
+      const width = a.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      const height = a.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+      return {
+        ratio: Math.max(c.width / width, c.height / height),
+        inside:
+          c.left >= a.left && c.top >= a.top && c.right <= a.right + 1 && c.bottom <= a.bottom + 1,
+      };
+    });
+    assert.ok(fit.inside, 'Fit preview must stay inside the photo area');
+    assert.ok(fit.ratio > 0.95, 'Fit preview must use the available width or height');
+  }
   try {
     await page.goto('http://127.0.0.1:5173');
     await page.locator('input[multiple]').setInputFiles('public/samples/alpine.jpg');
     await page.locator('canvas').first().waitFor();
+    await checkPreviewFit();
+    const header = await page.locator('.topbar').boundingBox();
+    assert.ok(header.height <= 60, 'Mobile header must fit on one row');
+    const navigation = await page.getByLabel('모바일 작업 도구').boundingBox();
+    assert.equal(Math.round(navigation.y + navigation.height), 844);
     await page
       .getByLabel('모바일 작업 도구')
       .getByRole('button', { name: '편집', exact: true })
@@ -28,11 +51,9 @@ for (const [name, engine] of [
       .locator('canvas')
       .first()
       .evaluate((c) => c.toDataURL());
-    await page.getByLabel('노출', { exact: true }).evaluate((input) => {
-      input.value = '0.8';
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await page.getByLabel('노출', { exact: true }).dispatchEvent('change');
+    await page.getByLabel('노출', { exact: true }).focus();
+    for (let i = 0; i < 16; i++) await page.keyboard.press('ArrowRight');
+    assert.equal(await page.getByLabel('노출', { exact: true }).inputValue(), '0.8');
     await page.waitForTimeout(500);
     assert.notEqual(
       await page
@@ -113,6 +134,7 @@ for (const [name, engine] of [
     assert.equal(p.photos[0].adjustments.masks.length, 1);
     assert.equal(p.photos[0].adjustments.hdrHighlights, 75);
     await page.setViewportSize({ width: 956, height: 440 });
+    await checkPreviewFit();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     assert.deepEqual(errors, []);
     console.log(
