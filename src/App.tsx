@@ -7,6 +7,7 @@ import {
 } from './native-images';
 import Select from './Select';
 import { previewMaxSide } from './preview-size';
+import { usePhotoGestures } from './use-photo-gestures';
 import { nativeMobile, saveFile } from './mobile';
 import { selectSubject } from './subject-client';
 import type { LocalMask, MaskPoint, SubjectTool } from './local-masks';
@@ -251,6 +252,17 @@ function App() {
       : saveMessage;
   const active = photos.find((p) => p.id === selected),
     a = active?.adjustments || defaults;
+  const [gestureWidth, gestureHeight] = active
+    ? outputSize(active.width, active.height, a)
+    : [1, 1];
+  const photoGestures = usePhotoGestures(
+    gestureWidth,
+    gestureHeight,
+    zoom,
+    setZoom,
+    tab !== 'mask' || compare,
+    selected,
+  );
   useEffect(() => {
     if (!hdrDisplay || a.dynamicRange !== 'hdr' || a.precision !== 'float') return;
     let cancelled = false;
@@ -319,7 +331,7 @@ function App() {
     };
   }, [photos, selected, ready, notify]);
   useEffect(() => {
-    if (!active || view !== 'edit') return;
+    if (!active || view !== 'edit' || photoGestures.isPinching) return;
     const controller = new AbortController();
     canvas.current?.setAttribute('aria-busy', 'true');
     let cancelled = false;
@@ -400,7 +412,19 @@ function App() {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [active, a, compare, view, zoom, proofSRGB, proofSDR, hdrDisplay, hdrReady, notify]);
+  }, [
+    active,
+    a,
+    compare,
+    view,
+    zoom,
+    proofSRGB,
+    proofSDR,
+    hdrDisplay,
+    hdrReady,
+    notify,
+    photoGestures.isPinching,
+  ]);
   function change(values: Partial<Adjustments>, commit = false) {
     setPhotos((current) =>
       current.map((p) => {
@@ -1288,6 +1312,7 @@ function App() {
             </div>
             <div
               className={`canvas-area ${zoom ? 'zoomed' : ''}`}
+              {...photoGestures.handlers}
               onDragStart={(e) => e.preventDefault()}
             >
               <div
@@ -1304,7 +1329,7 @@ function App() {
                     key={selected}
                     mask={a.masks.find((m) => m.id === maskId) || a.masks[0]}
                     show={maskOverlay}
-                    disabled={subjectBusy}
+                    disabled={subjectBusy || photoGestures.isPinching}
                     subjectTool={subjectTool}
                     onSubjectPoint={recognizeSubject}
                     geometry={{
@@ -1396,6 +1421,9 @@ function App() {
                   <option value={50}>50%</option>
                   <option value={100}>100%</option>
                   <option value={150}>150%</option>
+                  {zoom !== 0 && ![50, 100, 150].includes(zoom) && (
+                    <option value={zoom}>{zoom}%</option>
+                  )}
                 </Select>
                 <ZoomIn size={15} />
               </div>

@@ -442,6 +442,7 @@ button.icon-button {
   border-radius: 50%;
 }
 .canvas-area {
+  touch-action: none;
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -1909,7 +1910,7 @@ input[type='range']:disabled {
     padding: 4px 8px;
     container-type: size;
     overscroll-behavior: contain;
-    touch-action: pan-x pan-y;
+    touch-action: none;
   }
   .canvas-area:not(.zoomed) .canvas-holder canvas {
     max-width: 100cqw;

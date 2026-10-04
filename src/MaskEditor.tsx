@@ -335,8 +335,10 @@ export function MaskOverlay({
     [preview, setPreview] = useState(''),
     [hover, setHover] = useState<MaskPoint | null>(null);
   const dragging = useRef<LocalMask | null>(null);
+  const touchSubject = useRef<MaskPoint | null>(null);
   useEffect(() => {
     dragging.current = null;
+    touchSubject.current = null;
     setDraft(null);
   }, [
     mask,
@@ -432,7 +434,8 @@ export function MaskOverlay({
         if (e.button !== 0 || !mask.enabled || disabled) return;
         if (mask.kind === 'subject' && subjectTool === 'ai') {
           e.preventDefault();
-          onSubjectPoint(mask, { ...point(e), exclude: e.altKey });
+          if (e.pointerType === 'touch') touchSubject.current = { ...point(e), exclude: e.altKey };
+          else onSubjectPoint(mask, { ...point(e), exclude: e.altKey });
           return;
         }
         e.preventDefault();
@@ -476,6 +479,12 @@ export function MaskOverlay({
       onPointerMove={move}
       onPointerLeave={() => setHover(null)}
       onPointerUp={(e) => {
+        if (touchSubject.current) {
+          const p = touchSubject.current;
+          touchSubject.current = null;
+          if (!disabled) onSubjectPoint(mask, p);
+          return;
+        }
         move(e);
         const m = dragging.current;
         dragging.current = null;
@@ -491,6 +500,7 @@ export function MaskOverlay({
           onChange(m);
       }}
       onPointerCancel={() => {
+        touchSubject.current = null;
         dragging.current = null;
         setDraft(null);
       }}

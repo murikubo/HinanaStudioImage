@@ -4,7 +4,7 @@
 
 ## 바로 실행
 
-Windows x64에서는 `release/Hinana-Studio-Image-0.12.3-Windows-x64-Setup.exe`로 설치합니다. 설치 위치를 선택할 수 있고, 시작 메뉴/바탕화면 바로가기를 만듭니다.
+Windows x64에서는 `release/Hinana-Studio-Image-0.12.4-Windows-x64-Setup.exe`로 설치합니다. 설치 위치를 선택할 수 있고, 시작 메뉴/바탕화면 바로가기를 만듭니다.
 
 macOS Apple Silicon용 빌드가 있으면 `release/mac-arm64/Hinana Studio Image.app`을 실행합니다.
 
@@ -258,3 +258,5 @@ macOS에서 iPhone 이미지 처리 검증: `xcrun swiftc ios/App/App/NativeImag
 이어서 개발 서버를 실행하고 `node --experimental-strip-types tests/native-ios-smoke.mjs /tmp/hinana-fixtures`로 iOS 브리지 흐름을 검증합니다. 원본 HEIC 전달, HDR 자동 모드, 16비트 프로젝트 보존, 편집값을 적용한 네이티브 HDR 미리보기, 피사체 래스터 저장과 RAW 원본 재현상 전달을 확인합니다. 브리지 응답은 모의 플러그인이므로 실기기 사진 선택·카메라 RAW 지원·화면 밝기는 별도 확인해야 합니다.
 
 확대 미리보기는 배율에 필요한 크기로 렌더링하며 모바일은 최대 약 4MP로 제한합니다. 큰 사진의 확대 화면은 축소 렌더링될 수 있습니다. 배율과 미리보기 제한은 원본 및 원본 해상도 내보내기에 적용되지 않습니다. 사진 이동은 미리보기 영역의 스크롤로 처리합니다.
+
+사진 위에서 두 손가락을 벌리거나 모으면 맞춤 배율부터 최대 400%까지 확대·축소합니다. 확대 상태에서는 한 손가락으로 사진을 이동합니다. 마스크 편집에서도 두 손가락은 확대·축소로 처리하며, 한 손가락은 마스크 도구에 사용합니다. 핀치 중에는 기존 픽셀을 확대하고 손가락을 뗀 뒤 한 번 렌더링합니다. 개발 서버 실행 후 `node tests/gestures-smoke.mjs`로 터치 확대·축소, 이동, 마스크 획 방지를 검증합니다.
