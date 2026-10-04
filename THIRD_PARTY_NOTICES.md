@@ -36,3 +36,10 @@ in scripts/fetch-subject-model.mjs. Apache-2.0 license accompanies the applicati
 Inference runtime: ONNX Runtime 1.30.0 (MIT),
 https://github.com/microsoft/onnxruntime. Its license and third-party notices
 are included with the bundled npm package and in dist/licenses.
+
+Mobile runtime: Capacitor core, Android and iOS 8.5.2 (MIT),
+https://github.com/ionic-team/capacitor.
+Mobile filesystem: @capacitor/filesystem 8.1.4 (MIT).
+Mobile sharing: @capacitor/share 8.0.3 (MIT).
+https://github.com/ionic-team/capacitor-plugins.
+Their license texts accompany the web and mobile assets in public/licenses.

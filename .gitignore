@@ -15,3 +15,9 @@ native/bin/
 !.env.example
 
 /models/
+
+# Mobile build/signing state
+*.jks
+*.keystore
+*.p12
+*.mobileprovision

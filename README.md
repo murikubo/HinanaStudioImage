@@ -224,3 +224,24 @@ npm run dist:win # Windows 설치 파일 생성 (Windows 환경 권장)
 Unsplash의 다음 사진을 로컬 샘플로 포함했습니다.
 https://images.unsplash.com/photo-1464822759023-fed622ff2c3b
 샘플은 앱 기능을 둘러보기 위한 자료이며 사용자 사진은 별도로 불러옵니다.
+
+## iPhone · Android 앱
+
+Capacitor 8 기반 모바일 앱 프로젝트는 `ios/`와 `android/`에 있습니다. 사진·편집·프리셋 하단 도구와 세로/가로 화면, 노치 여백을 지원합니다. JPEG/PNG/WebP 사진, 기본 보정·색상·피부 보정·브러시/선형/원형 마스크·EXIF 표시·프로젝트 저장/열기를 재사용합니다. 내보내기와 `.hinanaimage` 저장은 OS 공유 창에서 저장 위치나 대상 앱을 선택합니다. 공유 창을 취소하면 파일이 외부에 저장되지 않습니다. 앱 내 작업은 IndexedDB에 자동 저장되므로 중요한 작업은 프로젝트로도 내보내세요.
+
+모바일에는 Electron의 RAW 현상과 ONNX 피사체 선택이 연결되지 않았습니다. HEIC 직접 해독도 지원하지 않습니다. HDR/Display P3 미리보기는 기기 WebView의 지원에 따라 달라지며, 실기기 검증 전에는 색 정확도를 보장하지 않습니다.
+
+```sh
+npm ci
+npm run mobile:sync
+npm run mobile:android   # Android Studio에서 열기
+npm run mobile:ios       # Xcode에서 열기
+```
+
+Android는 JDK 21과 Android SDK 36이 필요합니다. `android/local.properties`에 로컬 SDK 경로를 설정하고 `./android/gradlew -p android assembleDebug`로 테스트 APK를 만듭니다. 출력은 `android/app/build/outputs/apk/debug/app-debug.apk`이며 테스트용 debug 서명입니다. 기기에서 설치한 뒤 파일 선택·공유·화면 회전과 백그라운드 복원을 확인하세요.
+
+iOS는 Capacitor 8의 Xcode 환경과 Apple 서명 팀을 설정해야 실제 iPhone에 설치할 수 있습니다. Filesystem 플러그인의 파일 타임스탬프 API 사용 사유를 `PrivacyInfo.xcprivacy`에 포함했습니다. App Store/Play Store 등록과 배포용 서명은 별도입니다.
+
+GitHub Actions의 `Mobile apps` 워크플로가 Android APK, 서명 없는 iOS 시뮬레이터 앱을 빌드합니다. 모바일 화면 편집 테스트는 개발 서버 실행 후 `node tests/mobile-smoke.mjs`로 수행합니다. 브라우저 테스트가 실제 OS의 파일 선택기·공유 창 검증을 대신하지는 않습니다.
+
+공식 문서: [개발 환경](https://capacitorjs.com/docs/getting-started/environment-setup), [공유](https://capacitorjs.com/docs/apis/share), [파일 저장](https://capacitorjs.com/docs/apis/filesystem).

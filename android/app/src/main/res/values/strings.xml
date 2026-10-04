@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Hinana Studio Image</string>
+    <string name="title_activity_main">Hinana Studio Image</string>
+    <string name="package_name">studio.hinana.image</string>
+    <string name="custom_url_scheme">studio.hinana.image</string>
+</resources>

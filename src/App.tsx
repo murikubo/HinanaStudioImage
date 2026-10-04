@@ -1,3 +1,4 @@
+import { nativeMobile, saveFile } from './mobile';
 import { selectSubject } from './subject-client';
 import type { LocalMask, MaskPoint, SubjectTool } from './local-masks';
 import { MaskPanel, MaskOverlay } from './MaskEditor';
@@ -62,7 +63,6 @@ import {
   readDataURL,
   histogram,
   outputSize,
-  download,
   type Adjustments,
 } from './engine';
 import { appInfo } from './app-info';
@@ -569,7 +569,7 @@ function App() {
   async function saveProject() {
     setBusy('프로젝트 저장 중');
     try {
-      download(
+      await saveFile(
         new Blob(
           [
             JSON.stringify({
@@ -583,7 +583,11 @@ function App() {
         ),
         'Hinana-Workspace.hinanaimage',
       );
-      notify('원본과 보정값을 포함한 프로젝트를 저장했습니다.');
+      notify(
+        nativeMobile
+          ? '프로젝트 저장·공유 창을 열었습니다.'
+          : '원본과 보정값을 포함한 프로젝트를 저장했습니다.',
+      );
     } catch {
       notify('프로젝트를 저장하지 못했습니다.');
     } finally {
@@ -730,12 +734,16 @@ function App() {
             format === 'hdr-png' ? 'rec2100-pq' : outputColor,
           )
         : tagged;
-      download(
+      await saveFile(
         exported,
         `${active.name.replace(/\.[^.]+$/, '')}-edited.${highOutput ? 'png' : format === 'jpeg' ? 'jpg' : format}`,
       );
       setExportOpen(false);
-      notify(`${width} × ${height} 이미지가 내보내졌습니다.`);
+      notify(
+        nativeMobile
+          ? `${width} × ${height} 이미지 저장·공유 창을 열었습니다.`
+          : `${width} × ${height} 이미지가 내보내졌습니다.`,
+      );
       target.width = target.height = encodedCanvas.width = encodedCanvas.height = 0;
     } catch (e) {
       notify(`내보내기 실패: ${(e as Error).message}`);
@@ -847,10 +855,12 @@ function App() {
       !['colorSpace', 'precision', 'dynamicRange', 'hdrPeak'].includes(key) &&
       JSON.stringify(a[key]) !== JSON.stringify(defaults[key]),
   );
+  const [mobileSection, setMobileSection] = useState<'photos' | 'tools' | 'presets'>('tools');
   const dimensions = active ? outputSize(active.width, active.height, a) : [0, 0];
   return (
     <div
-      className={`app ${leftOpen ? '' : 'hide-left'} ${window.hinana ? `desktop-${window.hinana.platform}` : ''}`}
+      data-mobile-section={mobileSection}
+      className={`app ${nativeMobile ? 'native-mobile' : ''} ${leftOpen ? '' : 'hide-left'} ${window.hinana ? `desktop-${window.hinana.platform}` : ''}`}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
@@ -861,7 +871,11 @@ function App() {
         hidden
         ref={input}
         type="file"
-        accept="image/jpeg,image/png,image/webp,.dng,.cr2,.cr3,.nef,.nrw,.arw,.srf,.sr2,.raf,.orf,.rw2,.pef,.rwl,.3fr,.fff,.iiq,.srw,.raw"
+        accept={
+          window.hinana
+            ? 'image/jpeg,image/png,image/webp,.dng,.cr2,.cr3,.nef,.nrw,.arw,.srf,.sr2,.raf,.orf,.rw2,.pef,.rwl,.3fr,.fff,.iiq,.srw,.raw'
+            : 'image/jpeg,image/png,image/webp'
+        }
         multiple
         onChange={(e) => {
           if (e.target.files) void importFiles(e.target.files);
@@ -879,6 +893,42 @@ function App() {
           e.target.value = '';
         }}
       />
+      <nav className="mobile-navigation" aria-label="모바일 작업 도구">
+        <button disabled={!!busy || !ready} onClick={() => input.current?.click()}>
+          <Plus size={19} />
+          사진 추가
+        </button>
+        <button
+          aria-pressed={mobileSection === 'photos'}
+          onClick={() => {
+            setMobileSection('photos');
+            setView('grid');
+          }}
+        >
+          <Images size={19} />
+          사진
+        </button>
+        <button
+          aria-pressed={mobileSection === 'tools'}
+          onClick={() => {
+            setMobileSection('tools');
+            setView('edit');
+          }}
+        >
+          <SlidersHorizontal size={19} />
+          편집
+        </button>
+        <button
+          aria-pressed={mobileSection === 'presets'}
+          onClick={() => {
+            setMobileSection('presets');
+            setView('edit');
+          }}
+        >
+          <Palette size={19} />
+          프리셋
+        </button>
+      </nav>
       <header className="topbar">
         <div className="brand">
           <div className="brand-mark">
@@ -1099,6 +1149,7 @@ function App() {
                   onClick={() => {
                     choose(p.id);
                     setView('edit');
+                    setMobileSection('tools');
                   }}
                 >
                   <img src={p.src} alt={p.name} />

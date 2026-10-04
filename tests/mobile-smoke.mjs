@@ -1,0 +1,140 @@
+import { chromium, webkit } from '@playwright/test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+for (const [name, engine] of [
+  ['android', chromium],
+  ['iphone', webkit],
+]) {
+  if (process.env.MOBILE_TEST_ENGINE && process.env.MOBILE_TEST_ENGINE !== name) continue;
+  const browser = await engine.launch(name === 'android' ? { channel: 'chromium' } : {});
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    acceptDownloads: true,
+  });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  try {
+    await page.goto('http://127.0.0.1:5173');
+    await page.locator('input[multiple]').setInputFiles('public/samples/alpine.jpg');
+    await page.locator('canvas').first().waitFor();
+    await page
+      .getByLabel('모바일 작업 도구')
+      .getByRole('button', { name: '편집', exact: true })
+      .click();
+    const before = await page
+      .locator('canvas')
+      .first()
+      .evaluate((c) => c.toDataURL());
+    await page.getByLabel('노출', { exact: true }).evaluate((input) => {
+      input.value = '0.8';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await page.getByLabel('노출', { exact: true }).dispatchEvent('change');
+    await page.waitForTimeout(500);
+    assert.notEqual(
+      await page
+        .locator('canvas')
+        .first()
+        .evaluate((c) => c.toDataURL()),
+      before,
+    );
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    await page.screenshot({ path: `/tmp/hinana-mobile-${name}.png` });
+    await page
+      .getByLabel('모바일 작업 도구')
+      .getByRole('button', { name: '프리셋', exact: true })
+      .click();
+    await page.locator('.preset-list button').nth(1).click();
+    assert.ok(await page.locator('.left-panel').isVisible());
+    await page
+      .getByLabel('모바일 작업 도구')
+      .getByRole('button', { name: '편집', exact: true })
+      .click();
+    await page.getByRole('button', { name: '◉ 마스크', exact: true }).click();
+    await page.getByRole('button', { name: '선형 마스크', exact: true }).click();
+    await page
+      .getByLabel('모바일 작업 도구')
+      .getByRole('button', { name: '사진', exact: true })
+      .click();
+    assert.equal(await page.locator('.photo-grid>button').count(), 1);
+    await page.locator('.photo-grid>button').click();
+    const downloaded = page.waitForEvent('download');
+    await page.getByTitle('프로젝트 저장 (⌘/Ctrl S)').click();
+    const file = await downloaded;
+    assert.equal(file.suggestedFilename(), 'Hinana-Workspace.hinanaimage');
+    const p = JSON.parse(await fs.readFile(await file.path(), 'utf8'));
+    assert.equal(p.photos.length, 1);
+    assert.equal(p.photos[0].adjustments.masks.length, 1);
+    await page.setViewportSize({ width: 956, height: 440 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    assert.deepEqual(errors, []);
+    console.log(
+      `PASS ${name}: mobile layout, editing pixels, presets, local mask, library, project export and landscape`,
+    );
+  } finally {
+    await browser.close();
+  }
+}
+
+// Verify the native bridge contract without pretending to exercise an OS share sheet.
+if (!process.env.MOBILE_TEST_ENGINE || process.env.MOBILE_TEST_ENGINE === 'native') {
+  const browser = await chromium.launch({ channel: 'chromium' });
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.addInitScript(() => {
+    window.androidBridge = {};
+    window.__nativeCalls = [];
+    window.Capacitor = {
+      PluginHeaders: [
+        {
+          name: 'Filesystem',
+          methods: [
+            { name: 'writeFile', rtype: 'promise' },
+            { name: 'getUri', rtype: 'promise' },
+          ],
+        },
+        { name: 'Share', methods: [{ name: 'share', rtype: 'promise' }] },
+      ],
+      nativePromise: async (plugin, method, options) => {
+        window.__nativeCalls.push({ plugin, method, options });
+        if (window.__failExport && method === 'writeFile') throw Error('Storage full');
+        if (method === 'getUri') return { uri: 'file:///cache/' + options.path };
+        return {};
+      },
+    };
+  });
+  try {
+    await page.goto('http://127.0.0.1:5173');
+    await page.locator('input[multiple]').setInputFiles('public/samples/alpine.jpg');
+    await page.locator('canvas').first().waitFor();
+    await page.getByTitle('프로젝트 저장 (⌘/Ctrl S)').click();
+    await page.getByText('프로젝트 저장·공유 창을 열었습니다.', { exact: true }).waitFor();
+    const calls = await page.evaluate(() => window.__nativeCalls);
+    const write = calls.find((c) => c.method === 'writeFile');
+    const project = JSON.parse(Buffer.from(write.options.data, 'base64').toString('utf8'));
+    assert.equal(project.photos.length, 1);
+    assert.ok(project.photos[0].src.startsWith('data:image/jpeg;base64,'));
+    assert.equal(write.options.directory, 'CACHE');
+    assert.ok(write.options.path.endsWith('/Hinana-Workspace.hinanaimage'));
+    assert.equal(
+      calls.find((c) => c.method === 'share').options.files[0],
+      'file:///cache/' + write.options.path,
+    );
+    await page.evaluate(() => {
+      window.__failExport = true;
+    });
+    await page.getByTitle('프로젝트 저장 (⌘/Ctrl S)').click();
+    await page.getByText('프로젝트를 저장하지 못했습니다.', { exact: true }).waitFor();
+    assert.equal(
+      (await page.evaluate(() => window.__nativeCalls)).filter((c) => c.method === 'share').length,
+      1,
+    );
+    console.log(
+      'PASS native bridge contract: intact project bytes, cache URI handoff and storage failure handling (mock plugins)',
+    );
+  } finally {
+    await browser.close();
+  }
+}
