@@ -5,6 +5,9 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+const { version } = JSON.parse(
+  await fs.readFile(new URL('../package.json', import.meta.url), 'utf8'),
+);
 const env = { ...process.env };
 delete env.ELECTRON_RUN_AS_NODE;
 const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'hinana-smoke-'));
@@ -50,7 +53,7 @@ try {
   );
   await page.getByRole('button', { name: '프로그램 정보', exact: true }).click();
   await page.getByRole('dialog').getByText('비나래', { exact: true }).waitFor();
-  await page.getByRole('dialog').getByText('Ver. 0.11.1', { exact: true }).waitFor();
+  await page.getByRole('dialog').getByText(`Ver. ${version}`, { exact: true }).waitFor();
   assert.ok(
     await page.locator('.about-icon').evaluate((img) => img.complete && img.naturalWidth > 1000),
   );

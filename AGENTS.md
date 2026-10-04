@@ -4,3 +4,5 @@
 - Preserve unrelated user work. Do not force-push or rewrite remote history. Resolve routine integration issues while keeping existing changes.
 - Keep generated builds (`release/`, `dist/`, `dist-electron/`, `native/bin/`), dependencies, local photo projects, and secrets out of Git.
 - Communicate results and material verification limitations in Korean.
+
+- Increment the app version for each completed requested code change. Use `npm version patch --no-git-tag-version` (or minor for a feature release); its version hook synchronizes Android/iOS versions and increments their build numbers. Rebuild requested deliverables with the new version before committing.

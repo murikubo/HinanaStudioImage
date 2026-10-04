@@ -4,7 +4,7 @@
 
 ## 바로 실행
 
-Windows x64에서는 `release/Hinana-Studio-Image-0.11.1-Windows-x64-Setup.exe`로 설치합니다. 설치 위치를 선택할 수 있고, 시작 메뉴/바탕화면 바로가기를 만듭니다.
+Windows x64에서는 `release/Hinana-Studio-Image-0.11.2-Windows-x64-Setup.exe`로 설치합니다. 설치 위치를 선택할 수 있고, 시작 메뉴/바탕화면 바로가기를 만듭니다.
 
 macOS Apple Silicon용 빌드가 있으면 `release/mac-arm64/Hinana Studio Image.app`을 실행합니다.
 
@@ -248,3 +248,5 @@ GitHub Actions의 `Mobile apps` 워크플로가 Android APK, 서명 없는 iOS �
 공식 문서: [개발 환경](https://capacitorjs.com/docs/getting-started/environment-setup), [공유](https://capacitorjs.com/docs/apis/share), [파일 저장](https://capacitorjs.com/docs/apis/filesystem).
 
 모든 선택 메뉴는 앱의 어두운 테마에 맞춘 목록으로 표시하며 터치와 키보드 조작을 지원합니다. HDR 화면 미리보기는 WebGPU의 rgba16float / extended 설정(또는 Canvas 2D의 실제 float16 픽셀 보존과 extended 설정)과 화면의 HDR 신호를 함께 확인합니다. 지원되지 않는 WebView에서는 SDR 미리보기라는 안내를 표시합니다. HDR 파일을 출력할 수 있는 것과 기기 화면에서 HDR 밝기를 표시할 수 있는 것은 별개입니다.
+
+버전 갱신은 `npm version patch --no-git-tag-version`으로 수행합니다. `version` 훅이 Android/iOS 버전과 빌드 번호를 함께 갱신합니다. 기능 릴리스에는 `minor`를 사용할 수 있습니다.
