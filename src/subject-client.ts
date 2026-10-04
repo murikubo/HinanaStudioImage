@@ -1,9 +1,11 @@
+import { nativeIOS, NativeImages } from './native-images';
 import { loadImage, defaults } from './engine';
 import { paintFloat, precisionSourceInfo, requestPrecision } from './precision-client';
 import type { MaskPoint } from './local-masks';
 /** Recognition uses an SDR proxy only; original precision and working pixels remain untouched. */
 export async function selectSubject(src: string, points: MaskPoint[], signal: AbortSignal) {
-  if (!window.hinana) throw Error('피사체 선택은 데스크톱 앱에서 사용할 수 있습니다.');
+  if (!window.hinana && !nativeIOS)
+    throw Error('피사체 선택은 데스크톱 앱에서 사용할 수 있습니다.');
   const image = await loadImage(src);
   signal.throwIfAborted();
   const canvas = document.createElement('canvas');
@@ -30,12 +32,23 @@ export async function selectSubject(src: string, points: MaskPoint[], signal: Ab
   const ctx = canvas.getContext('2d', { colorSpace: 'srgb', willReadFrequently: true })!;
   ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
   const rgba = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  const requestId = crypto.randomUUID();
   const cancel = () => {
+    if (nativeIOS) void NativeImages.cancelSubject({ requestId }).catch(() => {});
     void window.hinana?.cancelSubject();
   };
   signal.addEventListener('abort', cancel, { once: true });
   try {
-    return await window.hinana.selectSubject({
+    if (nativeIOS) {
+      const result = await NativeImages.selectSubject({
+        png: canvas.toDataURL('image/png').split(',')[1],
+        points: points.map((p) => ({ x: p.x, y: p.y, exclude: !!p.exclude })),
+        requestId,
+      });
+      signal.throwIfAborted();
+      return result;
+    }
+    return await window.hinana!.selectSubject({
       rgba,
       width: canvas.width,
       height: canvas.height,

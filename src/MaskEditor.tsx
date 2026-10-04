@@ -20,6 +20,7 @@ type Props = {
   showOverlay: boolean;
   onOverlay: (show: boolean) => void;
   disabled: boolean;
+  subjectAvailable: boolean;
   subjectBusy: boolean;
   subjectTool: SubjectTool;
   onSubjectTool: (tool: SubjectTool) => void;
@@ -35,6 +36,7 @@ export function MaskPanel({
   showOverlay,
   onOverlay,
   disabled,
+  subjectAvailable,
   subjectBusy,
   subjectTool,
   onSubjectTool,
@@ -73,7 +75,9 @@ export function MaskPanel({
                 <button
                   key={kind}
                   disabled={
-                    disabled || masks.length >= MAX_MASKS || (kind === 'subject' && !window.hinana)
+                    disabled ||
+                    masks.length >= MAX_MASKS ||
+                    (kind === 'subject' && !subjectAvailable)
                   }
                   onClick={() => {
                     const m = newMask(kind, crypto.randomUUID());

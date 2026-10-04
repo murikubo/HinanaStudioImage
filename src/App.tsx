@@ -1,3 +1,10 @@
+import {
+  nativeIOS,
+  NativeImages,
+  nativeWorkingPNG,
+  pickNativeFiles,
+  useImageCapabilities,
+} from './native-images';
 import Select from './Select';
 import { nativeMobile, saveFile } from './mobile';
 import { selectSubject } from './subject-client';
@@ -141,6 +148,8 @@ function Hist({ bins }: { bins: number[][] }) {
   );
 }
 function App() {
+  const imageCapabilities = useImageCapabilities();
+  const [importOpen, setImportOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [keepExif, setKeepExif] = useState(true);
   const aboutClose = useRef<HTMLButtonElement>(null);
@@ -456,6 +465,27 @@ function App() {
   }
   const rawPattern =
     /\.(dng|cr2|cr3|nef|nrw|arw|srf|sr2|raf|orf|rw2|pef|rwl|3fr|fff|iiq|srw|raw)$/i;
+  function chooseImport() {
+    if (nativeIOS) setImportOpen(true);
+    else input.current?.click();
+  }
+  async function nativeImport(source: 'photos' | 'files') {
+    setImportOpen(false);
+    setBusy('원본 사진 가져오는 중');
+    try {
+      const selection = await pickNativeFiles(source);
+      setBusy('');
+      if (selection.files.length) await importFiles(selection.files);
+      if (selection.failures.length)
+        notify(
+          `${selection.failures.length}개 원본을 가져오지 못했습니다: ${selection.failures[0]}`,
+        );
+    } catch (error) {
+      notify(`사진 가져오기 실패: ${(error as Error).message}`);
+    } finally {
+      setBusy('');
+    }
+  }
   async function importFiles(files: FileList | File[]) {
     if (busy) return;
     const projects = Array.from(files).filter((file) => /\.(hinanaimage|hinana)$/i.test(file.name));
@@ -476,14 +506,29 @@ function App() {
         try {
           if (photos.length + added.length >= 200) throw new Error();
           const isRaw = rawPattern.test(file.name);
-          if (!isRaw && !/\.(jpe?g|png|webp)$/i.test(file.name))
+          if (
+            !isRaw &&
+            !/\.(jpe?g|png|webp)$/i.test(file.name) &&
+            !(nativeIOS && /\.(heic|heif)$/i.test(file.name))
+          )
             throw new Error('지원하지 않는 파일 형식입니다.');
           if (file.size > (isRaw ? 120 : 80) * 1024 * 1024)
             throw new Error(
               isRaw ? 'RAW는 120MB 이하만 지원합니다.' : '사진은 80MB 이하만 지원합니다.',
             );
           let src: string, rawSource: string | undefined;
-          if (isRaw) {
+          let nativePeak: number | undefined;
+          if (nativeIOS && (isRaw || /\.(heic|heif|jpe?g)$/i.test(file.name))) {
+            setBusy(isRaw ? `RAW 현상 중 · ${file.name}` : `HEIC/HDR 해독 중 · ${file.name}`);
+            const original = await readDataURL(file);
+            const decoded = await NativeImages.decodeImage({
+              base64: original.split(',')[1],
+              raw: isRaw,
+            });
+            src = await nativeWorkingPNG(decoded);
+            nativePeak = decoded.hdr ? decoded.peak * 203 : undefined;
+            if (isRaw) rawSource = `data:application/octet-stream;base64,${original.split(',')[1]}`;
+          } else if (isRaw) {
             if (!window.hinana) throw new Error('RAW는 데스크톱 앱에서 불러올 수 있습니다.');
             setBusy(`RAW 현상 중 · ${file.name}`);
             const decoded = await window.hinana.decodeRaw(file);
@@ -498,6 +543,9 @@ function App() {
             colorSpace: p3Supported ? 'display-p3' : 'srgb',
             precision: image.naturalWidth * image.naturalHeight <= 32_000_000 ? 'float' : 'legacy',
             dynamicRange: info.hdr ? 'hdr' : 'sdr',
+            hdrPeak: nativePeak
+              ? ([400, 1000, 2000, 4000].find((peak) => peak >= nativePeak!) ?? 4000)
+              : defaults.hdrPeak,
           };
           if (info.depth === 16 || info.hdr) {
             if (initial.precision !== 'float')
@@ -647,12 +695,34 @@ function App() {
       setBusy('');
     }
   }
+  async function showNativeHDR() {
+    if (!active || busy) return;
+    setBusy('HDR 화면 미리보기 준비 중');
+    try {
+      const image = await loadImage(active.src);
+      const result = await requestPrecision(active.src, image, a, 2000, 'hdr-png');
+      const png = await readDataURL(
+        new Blob([result.png as Uint8Array<ArrayBuffer>], { type: 'image/png' }),
+      );
+      await NativeImages.showHDRPreview({ png: png.split(',')[1] });
+    } catch (error) {
+      notify(`HDR 미리보기 실패: ${(error as Error).message}`);
+    } finally {
+      setBusy('');
+    }
+  }
   async function redevelopRaw() {
-    if (!active?.rawSource || !window.hinana || busy) return;
+    if (!active?.rawSource || (!window.hinana && !nativeIOS) || busy) return;
     const photo = active;
     setBusy('RAW 원본에서 Display P3로 다시 현상 중');
     try {
-      const result = await window.hinana.redevelopRaw(photo.rawSource!, photo.name);
+      const result = nativeIOS
+        ? {
+            src: await nativeWorkingPNG(
+              await NativeImages.decodeImage({ base64: photo.rawSource!.split(',')[1], raw: true }),
+            ),
+          }
+        : await window.hinana!.redevelopRaw(photo.rawSource!, photo.name);
       const image = await loadImage(result.src);
       const metadata = await readMetadata(result.src);
       const next: Adjustments = {
@@ -846,7 +916,7 @@ function App() {
       } else if (mod && e.key.toLowerCase() === 'o') {
         e.preventDefault();
         if (e.shiftKey) projectInput.current?.click();
-        else input.current?.click();
+        else chooseImport();
       } else if (mod && e.key.toLowerCase() === 's') {
         e.preventDefault();
         void k.saveProject();
@@ -889,8 +959,8 @@ function App() {
         ref={input}
         type="file"
         accept={
-          window.hinana
-            ? 'image/jpeg,image/png,image/webp,.dng,.cr2,.cr3,.nef,.nrw,.arw,.srf,.sr2,.raf,.orf,.rw2,.pef,.rwl,.3fr,.fff,.iiq,.srw,.raw'
+          window.hinana || nativeIOS
+            ? `image/jpeg,image/png,image/webp,${nativeIOS ? '.heic,.heif,' : ''}.dng,.cr2,.cr3,.nef,.nrw,.arw,.srf,.sr2,.raf,.orf,.rw2,.pef,.rwl,.3fr,.fff,.iiq,.srw,.raw`
             : 'image/jpeg,image/png,image/webp'
         }
         multiple
@@ -911,7 +981,7 @@ function App() {
         }}
       />
       <nav className="mobile-navigation" aria-label="모바일 작업 도구">
-        <button disabled={!!busy || !ready} onClick={() => input.current?.click()}>
+        <button disabled={!!busy || !ready} onClick={chooseImport}>
           <Plus size={19} />
           사진 추가
         </button>
@@ -1011,11 +1081,7 @@ function App() {
         <div className="workspace-title">
           작업 공간 <span>LOCAL</span>
         </div>
-        <button
-          className="import-button"
-          disabled={!!busy || !ready}
-          onClick={() => input.current?.click()}
-        >
+        <button className="import-button" disabled={!!busy || !ready} onClick={chooseImport}>
           <Plus size={17} /> 사진 추가{' '}
           <kbd>{window.hinana?.platform === 'darwin' ? '⌘ O' : 'Ctrl O'}</kbd>
         </button>
@@ -1352,11 +1418,7 @@ function App() {
                 <br />
                 사진 한 장에서 시작되는 나만의 작업실.
               </p>
-              <button
-                className="primary"
-                disabled={!!busy || !ready}
-                onClick={() => input.current?.click()}
-              >
+              <button className="primary" disabled={!!busy || !ready} onClick={chooseImport}>
                 <ImagePlus size={17} /> 첫 사진 불러오기
               </button>
               <button className="sample-button" disabled={!!busy || !ready} onClick={sample}>
@@ -1431,7 +1493,7 @@ function App() {
               className="add-frame"
               title="사진 추가"
               disabled={!!busy || !ready}
-              onClick={() => input.current?.click()}
+              onClick={chooseImport}
             >
               <Plus size={22} />
               <span>사진 추가</span>
@@ -1543,6 +1605,15 @@ function App() {
                     HDR 전환은 밝기를 자동으로 높이지 않습니다. SDR 사진의 밝은 영역을 확장하려면 이
                     값을 올리세요. 최대 밝기는 출력 상한입니다.
                   </p>
+                  {nativeIOS && imageCapabilities.appleHDR && (
+                    <button
+                      className="native-hdr-preview"
+                      disabled={!!busy || compare}
+                      onClick={() => void showNativeHDR()}
+                    >
+                      HDR 화면 보기 · iPhone
+                    </button>
+                  )}
                   <label className="proof-option">
                     <input
                       type="checkbox"
@@ -1556,9 +1627,11 @@ function App() {
                       ? 'HDR 화면 미리보기 · 기준 흰색 203 nit'
                       : proofSDR || proofSRGB
                         ? 'SDR 변환 미리보기 사용 중 · HDR 데이터는 유지됩니다.'
-                        : !hdrDisplay
-                          ? '현재 화면에서 HDR 표시가 감지되지 않았습니다. SDR 미리보기이며 HDR 파일 출력은 가능합니다.'
-                          : '이 앱 실행 환경은 HDR 화면 표시를 지원하지 않습니다. SDR 미리보기이며 HDR 파일 출력은 가능합니다.'}
+                        : nativeIOS && imageCapabilities.appleHDR
+                          ? '편집 화면은 SDR 미리보기입니다. HDR 화면 보기에서 보정 결과의 HDR 밝기를 확인하세요.'
+                          : !hdrDisplay
+                            ? '현재 화면에서 HDR 표시가 감지되지 않았습니다. SDR 미리보기이며 HDR 파일 출력은 가능합니다.'
+                            : '이 앱 실행 환경은 HDR 화면 표시를 지원하지 않습니다. SDR 미리보기이며 HDR 파일 출력은 가능합니다.'}
                   </p>
                 </>
               )}
@@ -1681,6 +1754,7 @@ function App() {
               showOverlay={maskOverlay}
               onOverlay={setMaskOverlay}
               disabled={!active || compare || !!busy || subjectBusy}
+              subjectAvailable={!!window.hinana || imageCapabilities.subject}
               subjectBusy={subjectBusy}
               subjectTool={subjectTool}
               onSubjectTool={setSubjectTool}
@@ -1955,6 +2029,27 @@ function App() {
           </section>
         </div>
       )}
+      {importOpen && (
+        <div className="modal-backdrop" onClick={() => setImportOpen(false)}>
+          <section
+            className="modal native-import-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="사진 원본 가져오기"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button className="modal-close" aria-label="닫기" onClick={() => setImportOpen(false)}>
+              <X size={20} />
+            </button>
+            <h2>사진 원본 가져오기</h2>
+            <p>HEIC·HDR·RAW 원본을 변환 없이 가져옵니다.</p>
+            <button className="primary" onClick={() => void nativeImport('photos')}>
+              사진 보관함에서 선택
+            </button>
+            <button onClick={() => void nativeImport('files')}>파일에서 선택 · RAW / ProRAW</button>
+          </section>
+        </div>
+      )}
       {helpOpen && (
         <div className="modal-backdrop" onClick={() => setHelpOpen(false)}>
           <section
@@ -1991,7 +2086,7 @@ function App() {
               프로젝트는 원본 사진과 보정값을 함께 담습니다.
               <br />
               RAW는 각 운영체제의 현상 엔진에서 지원하는 카메라에 한해 처리합니다. 부분 마스크는
-              아직 지원하지 않습니다.
+              원본 좌표를 따라 적용됩니다.
             </p>
           </section>
         </div>

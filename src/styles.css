@@ -2220,3 +2220,20 @@ input[type='range']:disabled {
 .hdr-expansion input {
   width: 100%;
 }
+.native-import-dialog > button:not(.modal-close) {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 12px;
+  border: 1px solid #63765a;
+  border-radius: 8px;
+  padding: 12px;
+}
+.native-hdr-preview {
+  width: 100%;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #63765a;
+  border-radius: 6px;
+  color: #d1dfb7;
+}
