@@ -1015,6 +1015,9 @@ input[type='range']:disabled {
   gap: 17px;
 }
 .photo-grid > button {
+  -webkit-touch-callout: none;
+  user-select: none;
+  touch-action: pan-y;
   display: block;
   text-align: left;
   padding: 7px;
@@ -1054,6 +1057,35 @@ input[type='range']:disabled {
   padding: 60px 0;
   text-align: center;
   color: #8e9997;
+}
+.library-hint {
+  color: #9aa69f;
+  font-size: 11px;
+  margin: 0 0 12px;
+}
+.photo-remove-dialog {
+  max-width: 420px;
+}
+.photo-remove-name {
+  overflow-wrap: anywhere;
+  color: #d1dfb7;
+}
+.photo-remove-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.photo-remove-actions button {
+  min-height: 44px;
+  padding: 10px 18px;
+}
+.photo-remove-confirm {
+  color: #ffb7b7;
+  border-color: #805353;
+}
+.film-frame {
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 .preset-cards {
   padding: 14px;
@@ -1851,8 +1883,16 @@ input[type='range']:disabled {
     gap: 6px;
   }
   .brand {
-    font-size: 12px;
-    gap: 8px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .brand span {
+    display: block;
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
   }
   .header-app-icon {
     width: 32px;
@@ -1877,8 +1917,7 @@ input[type='range']:disabled {
     padding: 6px 8px;
   }
   .project-open-button > span,
-  .export-button > span,
-  .brand > div > span {
+  .export-button > span {
     display: none;
   }
   .export-button {

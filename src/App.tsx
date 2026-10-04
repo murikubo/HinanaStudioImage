@@ -6,6 +6,8 @@ import {
   useImageCapabilities,
 } from './native-images';
 import Select from './Select';
+import PhotoButton from './PhotoButton';
+import RemovePhotoDialog from './RemovePhotoDialog';
 import { previewMaxSide } from './preview-size';
 import { usePhotoGestures } from './use-photo-gestures';
 import { nativeMobile, saveFile } from './mobile';
@@ -182,6 +184,7 @@ function App() {
     [busy, setBusy] = useState(''),
     [toast, setToast] = useState(''),
     [saveMessage, setSaveStatus] = useState('로컬 저장 준비');
+  const [removeId, setRemoveId] = useState('');
   const [view, setView] = useState<'edit' | 'grid'>('edit'),
     [filter, setFilter] = useState<'all' | 'stars'>('all'),
     [query, setQuery] = useState('');
@@ -658,16 +661,13 @@ function App() {
       p.map((photo) => (photo.id === selected ? { ...photo, rating: value } : photo)),
     );
   }
-  function remove() {
-    if (
-      !active ||
-      !window.confirm(`“${active.name}”을 작업 공간에서 제거할까요? 원본 파일은 유지됩니다.`)
-    )
-      return;
-    imageCache.current.delete(active.id);
-    const remaining = photos.filter((p) => p.id !== active.id);
+  function remove(id: string) {
+    imageCache.current.delete(id);
+    const remaining = photos.filter((p) => p.id !== id);
     setPhotos(remaining);
-    choose(remaining[0]?.id || '');
+    if (selected === id) choose(remaining[0]?.id || '');
+    setRemoveId('');
+    notify('사진을 라이브러리에서 삭제했습니다. 원본은 유지됩니다.');
   }
   async function saveProject() {
     setBusy('프로젝트 저장 중');
@@ -1068,7 +1068,7 @@ function App() {
             />
           </div>
           <div>
-            HINANA <span>STUDIO IMAGE</span>
+            HINANA <span>Studio Image</span>
           </div>
           <small>β</small>
         </div>
@@ -1268,11 +1268,17 @@ function App() {
                 />
               </label>
             </div>
+            {visible.length > 0 && (
+              <p className="library-hint">
+                사진을 길게 누르거나 마우스 오른쪽 버튼을 누르면 삭제할 수 있습니다.
+              </p>
+            )}
             <div className="photo-grid">
               {visible.map((p) => (
-                <button
+                <PhotoButton
                   className={p.id === selected ? 'selected' : ''}
                   key={p.id}
+                  onRemove={() => setRemoveId(p.id)}
                   onClick={() => {
                     choose(p.id);
                     setView('edit');
@@ -1284,7 +1290,7 @@ function App() {
                   <small>
                     {p.width} × {p.height} <span>{'★'.repeat(p.rating)}</span>
                   </small>
-                </button>
+                </PhotoButton>
               ))}
             </div>
             {visible.length === 0 && (
@@ -1499,7 +1505,11 @@ function App() {
                     ))}
                   </span>
                   <span className="toolbar-divider" />
-                  <button className="icon-button" title="선택 사진 제거" onClick={remove}>
+                  <button
+                    className="icon-button"
+                    title="선택 사진 제거"
+                    onClick={() => setRemoveId(selected)}
+                  >
                     <Trash2 size={13} />
                   </button>
                 </>
@@ -1526,8 +1536,9 @@ function App() {
           </div>
           <div className="filmstrip-items">
             {visible.map((p, i) => (
-              <button
+              <PhotoButton
                 key={p.id}
+                onRemove={() => setRemoveId(p.id)}
                 className={`film-frame ${p.id === selected ? 'selected' : ''}`}
                 onClick={() => {
                   choose(p.id);
@@ -1538,7 +1549,7 @@ function App() {
                 <span>{String(i + 1).padStart(2, '0')}</span>
                 {p.rating > 0 && <small>★ {p.rating}</small>}
                 {JSON.stringify(p.adjustments) !== JSON.stringify(defaults) && <i />}
-              </button>
+              </PhotoButton>
             ))}
             <button
               className="add-frame"
@@ -1552,6 +1563,13 @@ function App() {
           </div>
         </div>
       </main>
+      {photos.find((p) => p.id === removeId) && (
+        <RemovePhotoDialog
+          name={photos.find((p) => p.id === removeId)!.name}
+          onCancel={() => setRemoveId('')}
+          onRemove={() => remove(removeId)}
+        />
+      )}
       <aside className="right-panel">
         <div className="histogram">
           <div className="section-caption">
