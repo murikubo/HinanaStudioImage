@@ -367,6 +367,7 @@ function App() {
           nativeMobile ||
             window.matchMedia('(max-width: 900px), (max-width: 1100px) and (pointer: coarse)')
               .matches,
+          window.devicePixelRatio || 1,
         );
         if (a.precision === 'float') {
           const result = await requestPrecision(

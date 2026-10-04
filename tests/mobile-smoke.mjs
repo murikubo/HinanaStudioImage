@@ -71,7 +71,7 @@ for (const [name, engine] of [
       await page.getByLabel('미리보기 배율', { exact: true }).tap();
       await page.getByRole('listbox').getByRole('option', { name: '50%', exact: true }).tap();
       await page.waitForFunction(
-        () => document.querySelector('.canvas-holder canvas')?.width === 1100,
+        () => document.querySelector('.canvas-holder canvas')?.width === 1600,
       );
       const canvas = page.locator('.canvas-holder canvas');
       const beforePan = await canvas.evaluate((c) => c.toDataURL());

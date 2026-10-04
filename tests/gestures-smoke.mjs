@@ -54,7 +54,7 @@ try {
   assert.ok(zoom > 19 && zoom < 50, 'Fit pinch should create a continuous custom zoom');
   assert.equal(
     await page.locator('.canvas-holder canvas').evaluate((c) => c.width),
-    Math.floor((2200 * zoom) / 100),
+    Math.max(1600, Math.floor((2200 * zoom) / 100)),
   );
   assert.equal(
     await page.evaluate(() => window.visualViewport.scale),
@@ -65,7 +65,7 @@ try {
   assert.equal(await page.getByLabel('미리보기 배율', { exact: true }).inputValue(), '0');
   await page.getByLabel('미리보기 배율', { exact: true }).tap();
   await page.getByRole('listbox').getByRole('option', { name: '50%', exact: true }).tap();
-  await page.waitForFunction(() => document.querySelector('.canvas-holder canvas').width === 1100);
+  await page.waitForFunction(() => document.querySelector('.canvas-holder canvas').width === 1600);
   const area = await page.locator('.canvas-area').boundingBox(),
     y = area.y + area.height / 2;
   await touch('touchStart', [{ x: 330, y }]);
