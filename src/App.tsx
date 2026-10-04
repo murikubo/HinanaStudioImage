@@ -6,6 +6,7 @@ import {
   useImageCapabilities,
 } from './native-images';
 import Select from './Select';
+import { previewMaxSide } from './preview-size';
 import { nativeMobile, saveFile } from './mobile';
 import { selectSubject } from './subject-client';
 import type { LocalMask, MaskPoint, SubjectTool } from './local-masks';
@@ -343,12 +344,21 @@ function App() {
               crop: a.crop,
             }
           : a;
+        const [previewWidth, previewHeight] = outputSize(active.width, active.height, settings);
+        const maxSide = previewMaxSide(
+          previewWidth,
+          previewHeight,
+          zoom,
+          nativeMobile ||
+            window.matchMedia('(max-width: 900px), (max-width: 1100px) and (pointer: coarse)')
+              .matches,
+        );
         if (a.precision === 'float') {
           const result = await requestPrecision(
             active.src,
             image,
             settings,
-            zoom ? Infinity : 1600,
+            maxSide,
             undefined,
             undefined,
             controller.signal,
@@ -369,7 +379,7 @@ function App() {
           proofSRGB && a.colorSpace === 'display-p3'
             ? document.createElement('canvas')
             : canvas.current;
-        const pixels = renderPhoto(image, working, settings, zoom ? Infinity : 1600);
+        const pixels = renderPhoto(image, working, settings, maxSide);
         if (working !== canvas.current) {
           canvas.current.width = working.width;
           canvas.current.height = working.height;
@@ -959,7 +969,7 @@ function App() {
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
-        if (!busy && ready) void importFiles(e.dataTransfer.files);
+        if (!busy && ready && e.dataTransfer.files.length) void importFiles(e.dataTransfer.files);
       }}
     >
       <input
@@ -1276,7 +1286,10 @@ function App() {
                 {changed && !compare && <span />}
               </div>
             </div>
-            <div className={`canvas-area ${zoom ? 'zoomed' : ''}`}>
+            <div
+              className={`canvas-area ${zoom ? 'zoomed' : ''}`}
+              onDragStart={(e) => e.preventDefault()}
+            >
               <div
                 className="canvas-holder"
                 style={zoom ? { width: `${(dimensions[0] * zoom) / 100}px`, flexShrink: 0 } : {}}
@@ -1375,6 +1388,7 @@ function App() {
                 </button>
                 <Select
                   aria-label="미리보기 배율"
+                  title="큰 사진의 확대 미리보기는 표시 해상도가 제한됩니다. 내보내기는 원본 해상도를 유지합니다."
                   value={zoom}
                   onChange={(e) => setZoom(Number(e.target.value))}
                 >

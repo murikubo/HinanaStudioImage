@@ -63,6 +63,33 @@ for (const [name, engine] of [
       before,
     );
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    // Zoom, pan, then fit repeatedly: panning must not allocate/render another frame.
+    await page.evaluate(() => {
+      window.__zoomNavigationMarker = 'same-page';
+    });
+    for (let repeat = 0; repeat < 3; repeat++) {
+      await page.getByLabel('미리보기 배율', { exact: true }).tap();
+      await page.getByRole('listbox').getByRole('option', { name: '50%', exact: true }).tap();
+      await page.waitForFunction(
+        () => document.querySelector('.canvas-holder canvas')?.width === 1100,
+      );
+      const canvas = page.locator('.canvas-holder canvas');
+      const beforePan = await canvas.evaluate((c) => c.toDataURL());
+      await page.locator('.canvas-area').evaluate((area) => {
+        area.scrollLeft = 120;
+        area.scrollTop = 80;
+      });
+      await page.waitForTimeout(100);
+      assert.ok(await page.locator('.canvas-area').evaluate((area) => area.scrollLeft > 0));
+      assert.equal(await canvas.evaluate((c) => c.toDataURL()), beforePan);
+      await page.getByLabel('미리보기 배율', { exact: true }).tap();
+      await page.getByRole('listbox').getByRole('option', { name: '맞춤', exact: true }).tap();
+      await page.waitForFunction(
+        () => document.querySelector('.canvas-holder canvas')?.width === 1600,
+      );
+      await checkPreviewFit();
+      assert.equal(await page.evaluate(() => window.__zoomNavigationMarker), 'same-page');
+    }
     // Touch opens our app listbox, including on WebKit, rather than the system picker.
     await page.getByLabel('편집 정밀도', { exact: true }).tap();
     await page.getByRole('listbox').waitFor();

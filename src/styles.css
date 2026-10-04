@@ -1908,6 +1908,8 @@ input[type='range']:disabled {
   .canvas-area {
     padding: 4px 8px;
     container-type: size;
+    overscroll-behavior: contain;
+    touch-action: pan-x pan-y;
   }
   .canvas-area:not(.zoomed) .canvas-holder canvas {
     max-width: 100cqw;
