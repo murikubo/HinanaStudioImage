@@ -25,6 +25,22 @@ class StudioIcon(private val name: String, color: Int) : Drawable() {
             canvas.drawPath(path, paint)
         }
         when (name) {
+            "검색" -> {
+                canvas.drawCircle(10f, 10f, 6f, paint)
+                line(15f, 15f, 21f, 21f)
+            }
+            "맞춤" -> {
+                line(4f, 9f, 4f, 4f, 9f, 4f)
+                line(15f, 4f, 20f, 4f, 20f, 9f)
+                line(4f, 15f, 4f, 20f, 9f, 20f)
+                line(15f, 20f, 20f, 20f, 20f, 15f)
+            }
+            "확대" -> {
+                canvas.drawCircle(10f, 10f, 6f, paint)
+                line(15f, 15f, 21f, 21f)
+                line(10f, 7f, 10f, 13f)
+                line(7f, 10f, 13f, 10f)
+            }
             "열기" -> line(3f, 19f, 3f, 5f, 9f, 5f, 11f, 8f, 21f, 8f, 18f, 19f, 3f, 19f)
             "ⓘ",
             "정보" -> {

@@ -2,6 +2,7 @@ package studio.hinana.image.nativeeditor
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -43,12 +44,20 @@ class NativePhotoAdapter(
             LinearLayout(context).also {
                 it.orientation = LinearLayout.VERTICAL
                 it.setPadding(
-                    (6 * density).toInt(),
-                    (6 * density).toInt(),
-                    (6 * density).toInt(),
-                    (6 * density).toInt(),
+                    (8 * density).toInt(),
+                    (8 * density).toInt(),
+                    (8 * density).toInt(),
+                    (8 * density).toInt(),
                 )
-                it.layoutParams = RecyclerView.LayoutParams(-1, (190 * density).toInt())
+                it.layoutParams =
+                    RecyclerView.LayoutParams(-1, (220 * density).toInt()).also { lp ->
+                        lp.setMargins(
+                            (6 * density).toInt(),
+                            (6 * density).toInt(),
+                            (6 * density).toInt(),
+                            (6 * density).toInt(),
+                        )
+                    }
             }
         val image =
             ImageView(context).also {
@@ -61,6 +70,12 @@ class NativePhotoAdapter(
                 it.setTextColor(Color.LTGRAY)
                 it.textSize = 12f
                 it.maxLines = 2
+                it.setPadding(
+                    (4 * density).toInt(),
+                    (12 * density).toInt(),
+                    0,
+                    (8 * density).toInt(),
+                )
             }
         tile.addView(title)
         return Holder(tile, image, title)
@@ -72,7 +87,22 @@ class NativePhotoAdapter(
         holder.clear()
         val photo = photos[position]
         val token = holder.generation
-        holder.title.text = photo.name + "\n" + "★".repeat(photo.rating.coerceIn(0, 5))
+        holder.title.text =
+            photo.name +
+                "\n" +
+                "${photo.width} × ${photo.height}" +
+                if (photo.rating > 0) "  ★${photo.rating}" else ""
+        val density = holder.tile.resources.displayMetrics.density
+        holder.tile.background =
+            GradientDrawable().also {
+                it.setColor(Color.rgb(33, 39, 39))
+                it.cornerRadius = 5 * density
+                it.setStroke(
+                    density.toInt().coerceAtLeast(1),
+                    if (photo.id == library.selected) Color.rgb(193, 209, 163)
+                    else Color.rgb(50, 60, 61),
+                )
+            }
         holder.tile.contentDescription = photo.name
         holder.tile.setOnClickListener { select(photo) }
         holder.tile.setOnLongClickListener {

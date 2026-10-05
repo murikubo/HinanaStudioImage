@@ -37,7 +37,9 @@ class MainActivity : AppCompatActivity() {
     private var selectedMask = ""
     private var tool = "add"
     private var comparing = false
+    private var canvasZoom = "맞춤"
     private lateinit var bottom: LinearLayout
+    private lateinit var resetFooter: LinearLayout
     private var panelTabs: LinearLayout? = null
     private val muted = Color.rgb(137, 145, 146)
     private val accent = Color.rgb(207, 223, 178)
@@ -87,13 +89,7 @@ class MainActivity : AppCompatActivity() {
             LinearLayout.LayoutParams(0, dp(52), 1f),
         )
         header.addView(iconButton("열기") { pick(true) })
-        header.addView(
-            iconButton("ⓘ") {
-                alert(
-                    "HINANA Studio Image\nVer. ${BuildConfig.VERSION_NAME}\n개발/제작자 비나래\n네이티브 GPU 편집기"
-                )
-            }
-        )
+        header.addView(iconButton("ⓘ") { showAbout() })
         header.addView(iconButton("저장") { job { share(library.project()) } })
         header.addView(iconButton("내보내기") { exportDialog() })
         header.setBackgroundColor(Color.rgb(27, 29, 30))
@@ -175,7 +171,35 @@ class MainActivity : AppCompatActivity() {
             val icon = StudioIcon(title, muted).also { d -> d.setBounds(0, 0, dp(21), dp(21)) }
             it.setCompoundDrawables(icon, null, null, null)
             it.setPadding(dp(10), 0, dp(10), 0)
-            it.layoutParams = LinearLayout.LayoutParams(dp(42), dp(44))
+            if (title == "열기" || title == "내보내기") {
+                it.background =
+                    GradientDrawable().also { d ->
+                        d.setColor(
+                            if (title == "내보내기") Color.rgb(35, 40, 35) else Color.TRANSPARENT
+                        )
+                        d.cornerRadius = dp(4).toFloat()
+                        d.setStroke(
+                            dp(1),
+                            if (title == "내보내기") Color.rgb(117, 133, 95) else Color.rgb(61, 69, 60),
+                        )
+                    }
+            }
+            it.layoutParams =
+                LinearLayout.LayoutParams(dp(40), dp(40)).also { lp ->
+                    lp.setMargins(dp(2), dp(2), dp(2), dp(2))
+                }
+        }
+
+    private fun toolButton(iconName: String, title: String, action: () -> Unit): Button =
+        button(title, action).also {
+            val icon = StudioIcon(iconName, muted).also { d -> d.setBounds(0, 0, dp(17), dp(17)) }
+            it.setCompoundDrawables(icon, null, null, null)
+            it.compoundDrawablePadding = dp(4)
+            it.background = RippleDrawable(ColorStateList.valueOf(0x20ffffff), null, null)
+            it.textSize = 10f
+            it.setTextColor(muted)
+            it.setPadding(dp(4), 0, dp(4), 0)
+            it.layoutParams = LinearLayout.LayoutParams(-2, dp(44))
         }
 
     private fun updateNavigation() {
@@ -365,13 +389,60 @@ class MainActivity : AppCompatActivity() {
                 it.hint = "사진 검색"
                 it.setTextColor(Color.WHITE)
             }
-        body.addView(search)
         body.addView(
-            button(if (starsOnly) "별표 사진만 · 켜짐" else "별표 사진만") {
-                starsOnly = !starsOnly
-                showLibrary()
+            text("YOUR PERSPECTIVE").also {
+                it.setTextColor(accent)
+                it.textSize = 9f
+                it.letterSpacing = .3f
             }
         )
+        body.addView(text("순간을 모으다.").also { it.textSize = 27f })
+        body.addView(
+            text("사진을 선택하고 나만의 시선으로 완성해 보세요.").also {
+                it.setTextColor(muted)
+                it.textSize = 12f
+            }
+        )
+        search.textSize = 13f
+        search.setCompoundDrawables(
+            StudioIcon("검색", muted).also { it.setBounds(0, 0, dp(16), dp(16)) },
+            null,
+            null,
+            null,
+        )
+        search.compoundDrawablePadding = dp(10)
+        search.setPadding(dp(12), dp(8), dp(12), dp(8))
+        search.background =
+            GradientDrawable().also {
+                it.setColor(Color.TRANSPARENT)
+                it.cornerRadius = dp(5).toFloat()
+                it.setStroke(dp(1), Color.rgb(52, 62, 63))
+            }
+        body.addView(
+            search,
+            LinearLayout.LayoutParams(-1, dp(40)).also {
+                it.setMargins(dp(12), dp(16), dp(12), dp(16))
+            },
+        )
+        val help = row()
+        help.addView(
+            text("사진을 길게 누르면 삭제할 수 있습니다.").also {
+                it.setTextColor(muted)
+                it.textSize = 11f
+            },
+            LinearLayout.LayoutParams(0, -2, 1f),
+        )
+        help.addView(
+            button(if (starsOnly) "★" else "☆") {
+                    starsOnly = !starsOnly
+                    showLibrary()
+                }
+                .also {
+                    it.background = null
+                    it.setTextColor(if (starsOnly) accent else muted)
+                }
+        )
+        body.addView(help)
         val recycler = RecyclerView(this)
         recycler.layoutManager =
             GridLayoutManager(this, if (resources.configuration.screenWidthDp >= 700) 4 else 2)
@@ -451,7 +522,40 @@ class MainActivity : AppCompatActivity() {
             if (wide) LinearLayout.LayoutParams(dp(330), -1)
             else LinearLayout.LayoutParams(-1, 0, 1f),
         )
-        preview.addView(text("${p.name} · ${p.width} × ${p.height}"))
+        val photoHeading = row()
+        val labels = LinearLayout(this).also { it.orientation = LinearLayout.VERTICAL }
+        labels.addView(
+            text(File(p.name).nameWithoutExtension).also {
+                it.textSize = 13f
+                it.setPadding(dp(4), dp(5), 0, dp(2))
+            }
+        )
+        labels.addView(
+            text(
+                    "${File(p.name).extension.uppercase()}   ·   ${p.width} × ${p.height}   ·   비파괴 편집"
+                )
+                .also {
+                    it.textSize = 9f
+                    it.setTextColor(muted)
+                    it.setPadding(dp(4), 0, 0, dp(6))
+                }
+        )
+        photoHeading.addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
+        val changed =
+            NativePhoto.defaults().keys().asSequence().any { key ->
+                NativePhoto.defaults().opt(key) is Number &&
+                    p.settings.optDouble(key) != NativePhoto.defaults().optDouble(key)
+            } ||
+                p.settings.optBoolean("flip") ||
+                p.settings.optString("crop") != "original" ||
+                (p.settings.optJSONArray("masks")?.length() ?: 0) > 0
+        photoHeading.addView(button(if (changed) "보정됨 •" else "원본") {})
+        (photoHeading.getChildAt(1) as Button).also { badge ->
+            badge.textSize = 9f
+            badge.setTextColor(accent)
+            badge.layoutParams = LinearLayout.LayoutParams(-2, dp(26))
+        }
+        preview.addView(photoHeading)
         canvas = NativeCanvas(this)
         canvas.error = { alert(it) }
         canvas.onStroke = { maskStroke(it) }
@@ -460,7 +564,7 @@ class MainActivity : AppCompatActivity() {
         canvas.load(library)
         val actions = row()
         actions.addView(
-            iconButton("자르기") {
+            toolButton("자르기", "자르기") {
                 choices("사진 비율", listOf("original", "1:1", "4:5", "3:2", "16:9")) {
                     edit { a -> a.put("crop", it) }
                 }
@@ -473,7 +577,7 @@ class MainActivity : AppCompatActivity() {
         actions.addView(iconButton("↶") { undo(false) })
         actions.addView(iconButton("↷") { undo(true) })
         actions.addView(
-            iconButton("원본") {
+            toolButton("원본", "원본 비교") {
                 comparing = !comparing
                 canvas.changed(comparing, true)
             }
@@ -484,13 +588,29 @@ class MainActivity : AppCompatActivity() {
                     canvas.setZoom(it.removeSuffix("%").toIntOrNull() ?: 0)
                 }
             }
+        actions.addView(iconButton("맞춤") { canvas.setZoom(0) })
+        zoomButton.background = RippleDrawable(ColorStateList.valueOf(0x20ffffff), null, null)
+        zoomButton.setTextColor(accent)
+        zoomButton.layoutParams = LinearLayout.LayoutParams(dp(54), dp(44))
         actions.addView(zoomButton)
-        canvas.onZoom = { zoomButton.text = it }
+        actions.addView(
+            iconButton("확대") {
+                canvas.setZoom(
+                    ((canvasZoom.removeSuffix("%").toIntOrNull() ?: 25) * 1.5)
+                        .toInt()
+                        .coerceAtMost(400)
+                )
+            }
+        )
+        canvas.onZoom = {
+            canvasZoom = it
+            zoomButton.text = "$it ⌄"
+        }
         val actionScroll = HorizontalScrollView(this)
         actionScroll.addView(actions)
         preview.addView(actionScroll)
         val histogram = NativeHistogram(this)
-        tools.addView(histogram, LinearLayout.LayoutParams(-1, dp(36)))
+        if (wide) tools.addView(histogram, LinearLayout.LayoutParams(-1, dp(60)))
         canvas.onHistogram = { histogram.bins = it }
         val tabs = row()
         panelTabs = tabs
@@ -506,13 +626,16 @@ class MainActivity : AppCompatActivity() {
             )
         }
         tools.setBackgroundColor(Color.rgb(30, 32, 33))
+        tabs.visibility = if (selectedPanel == "프리셋") View.GONE else View.VISIBLE
         tools.addView(tabs)
-        tools.addView(divider())
+        tools.addView(divider().also { it.visibility = tabs.visibility })
         updateTabs()
         val scroll = ScrollView(this)
         controls = LinearLayout(this).also { it.orientation = LinearLayout.VERTICAL }
         scroll.addView(controls)
         tools.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        resetFooter = LinearLayout(this).also { it.orientation = LinearLayout.VERTICAL }
+        tools.addView(resetFooter)
         showControls()
     }
 
@@ -537,12 +660,133 @@ class MainActivity : AppCompatActivity() {
         canvas.changed(comparing, true)
     }
 
+    private fun studioDialog(content: LinearLayout): android.app.Dialog {
+        return android.app.Dialog(this).also { dialog ->
+            content.orientation = LinearLayout.VERTICAL
+            content.setPadding(dp(20), dp(20), dp(20), dp(20))
+            content.background =
+                GradientDrawable().also {
+                    it.setColor(Color.rgb(32, 33, 41))
+                    it.cornerRadius = dp(12).toFloat()
+                    it.setStroke(dp(1), Color.rgb(63, 65, 75))
+                }
+            dialog.setContentView(ScrollView(this).also { it.addView(content) })
+            dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+            dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            dialog.window?.setDimAmount(.7f)
+            if (android.os.Build.VERSION.SDK_INT >= 31) {
+                dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                dialog.window?.attributes =
+                    dialog.window?.attributes?.also { it.blurBehindRadius = dp(12) }
+            }
+            dialog.show()
+            dialog.window?.setLayout(
+                minOf(resources.displayMetrics.widthPixels - dp(24), dp(440)),
+                -2,
+            )
+        }
+    }
+
+    private fun showAbout() {
+        val card = LinearLayout(this).also { it.orientation = LinearLayout.VERTICAL }
+        val closeRow = row().also { it.gravity = Gravity.END }
+        val close = button("×") {}
+        closeRow.addView(close)
+        card.addView(closeRow)
+        card.addView(
+            ImageView(this).also {
+                it.background =
+                    GradientDrawable().also { d ->
+                        d.setColor(Color.TRANSPARENT)
+                        d.cornerRadius = dp(18).toFloat()
+                    }
+                it.clipToOutline = true
+                it.setImageBitmap(
+                    assets.open("app-icon.png").use { input ->
+                        BitmapFactory.decodeStream(
+                            input,
+                            null,
+                            BitmapFactory.Options().also { o -> o.inSampleSize = 8 },
+                        )
+                    }
+                )
+            },
+            LinearLayout.LayoutParams(dp(86), dp(86)).also {
+                it.gravity = Gravity.CENTER
+                it.bottomMargin = dp(20)
+            },
+        )
+        card.addView(
+            text("HINANA STUDIO IMAGE").also {
+                it.gravity = Gravity.CENTER
+                it.textSize = 20f
+                it.setTypeface(null, android.graphics.Typeface.BOLD)
+            }
+        )
+        card.addView(
+            text("당신의 시선으로 빛과 색을 다듬는 사진 작업실").also {
+                it.gravity = Gravity.CENTER
+                it.textSize = 11f
+                it.setTextColor(muted)
+            }
+        )
+        listOf(
+                "프로그램 명" to "Hinana Studio Image",
+                "개발/제작자" to "비나래",
+                "버전" to "Ver. ${BuildConfig.VERSION_NAME}",
+            )
+            .forEach { (label, value) ->
+                card.addView(divider())
+                val r = row()
+                r.addView(
+                    text(label).also { it.setTextColor(muted) },
+                    LinearLayout.LayoutParams(0, dp(48), 1f),
+                )
+                r.addView(text(value).also { it.gravity = Gravity.CENTER_VERTICAL })
+                card.addView(r)
+            }
+        val dialog = studioDialog(card)
+        close.setOnClickListener { dialog.dismiss() }
+    }
+
     private fun choices(title: String, options: List<String>, done: (String) -> Unit) {
-        AlertDialog.Builder(this)
-            .setTitle(title)
-            .setItems(options.toTypedArray()) { _, which -> done(options[which]) }
-            .setNegativeButton("취소", null)
-            .show()
+        val card = LinearLayout(this).also { it.orientation = LinearLayout.VERTICAL }
+        card.addView(text(title).also { it.textSize = 17f })
+        val dialog = studioDialog(card)
+        options.forEach { option ->
+            card.addView(
+                button(option) {
+                    dialog.dismiss()
+                    done(option)
+                },
+                LinearLayout.LayoutParams(-1, dp(44)).also { it.topMargin = dp(5) },
+            )
+        }
+        card.addView(button("취소") { dialog.dismiss() })
+    }
+
+    private fun selectionRow(title: String, value: String, action: () -> Unit) {
+        val r = row()
+        r.setPadding(dp(14), dp(4), dp(14), dp(4))
+        r.addView(
+            text(title).also {
+                it.setPadding(0, 0, dp(8), 0)
+                it.setTextColor(accent)
+                it.textSize = 11f
+            },
+            LinearLayout.LayoutParams(dp(88), -2),
+        )
+        val item = button("$value    ⌄", action)
+        item.gravity = Gravity.CENTER_VERTICAL or Gravity.START
+        item.setTextColor(accent)
+        item.background =
+            GradientDrawable().also {
+                it.setColor(Color.rgb(27, 33, 28))
+                it.cornerRadius = dp(5).toFloat()
+                it.setStroke(dp(1), Color.rgb(61, 72, 59))
+            }
+        r.addView(item, LinearLayout.LayoutParams(0, dp(40), 1f))
+        controls.addView(r)
     }
 
     private fun slider(title: String, key: String, min: Double = -100.0, max: Double = 100.0) {
@@ -622,42 +866,52 @@ class MainActivity : AppCompatActivity() {
                 slider("피부 부드러움", "skinSmooth", 0.0, 100.0)
                 slider("붉은 기 감소", "skinRedness", 0.0, 100.0)
                 slider("피부 밝기", "skinBrightness", 0.0, 100.0)
-                controls.addView(
-                    button("작업 색공간 · ${p.settings.optString("colorSpace")}") {
-                        choices("작업 색공간", listOf("srgb", "display-p3")) { value ->
-                            edit { it.put("colorSpace", value) }
-                            showControls()
+                controls.addView(divider())
+                selectionRow(
+                    "편집 정밀도",
+                    if (p.settings.optString("precision") == "legacy") "기존 8비트" else "32비트 부동소수점",
+                ) {
+                    choices("편집 정밀도", listOf("기존 8비트", "32비트 부동소수점")) { value ->
+                        edit {
+                            it.put("precision", if (value == "기존 8비트") "legacy" else "float")
+                            if (value == "기존 8비트") it.put("dynamicRange", "sdr")
                         }
+                        showControls()
                     }
-                )
-                controls.addView(
-                    button("편집 정밀도 · ${p.settings.optString("precision")}") {
-                        choices("편집 정밀도", listOf("float", "legacy")) { value ->
-                            edit {
-                                it.put("precision", value)
-                                if (value == "legacy") it.put("dynamicRange", "sdr")
-                            }
-                            showControls()
+                }
+                selectionRow("밝기 범위", p.settings.optString("dynamicRange").uppercase()) {
+                    choices("밝기 범위", listOf("SDR", "HDR")) { value ->
+                        edit {
+                            it.put("dynamicRange", value.lowercase())
+                            if (value == "HDR") it.put("precision", "float")
                         }
+                        showControls()
                     }
-                )
-                toggle("HDR 편집", p.settings.optString("dynamicRange") == "hdr") { value ->
-                    edit {
-                        it.put("dynamicRange", if (value) "hdr" else "sdr")
-                        if (value) it.put("precision", "float")
-                    }
-                    showControls()
                 }
                 if (p.settings.optString("dynamicRange") == "hdr") {
+                    selectionRow("HDR 최대 밝기", "${p.settings.optInt("hdrPeak",1000)} nit") {
+                        choices("HDR 최대 밝기", listOf("400", "1000", "2000", "4000")) { value ->
+                            edit { it.put("hdrPeak", value.toInt()) }
+                            showControls()
+                        }
+                    }
+                    slider("HDR 밝은 영역 확장", "hdrHighlights", 0.0, 100.0)
                     controls.addView(
-                        button("HDR 최대 밝기") {
-                            choices("HDR 최대 밝기", listOf("400", "1000", "2000", "4000")) { value ->
-                                edit { it.put("hdrPeak", value.toInt()) }
-                            }
+                        text("현재 화면은 SDR 변환 미리보기입니다. HDR 데이터와 16비트 출력은 유지됩니다.").also {
+                            it.textSize = 10f
+                            it.setTextColor(muted)
                         }
                     )
-                    slider("HDR 하이라이트 확장", "hdrHighlights", 0.0, 100.0)
-                    controls.addView(text("현재 화면은 SDR 변환 미리보기입니다. HDR 데이터와 16비트 출력은 유지됩니다."))
+                }
+                selectionRow(
+                    "작업 색공간",
+                    if (p.settings.optString("colorSpace") == "display-p3") "Display P3"
+                    else "sRGB",
+                ) {
+                    choices("작업 색공간", listOf("sRGB", "Display P3")) { value ->
+                        edit { it.put("colorSpace", if (value == "sRGB") "srgb" else "display-p3") }
+                        showControls()
+                    }
                 }
             }
             "색상·톤" -> {
@@ -675,7 +929,9 @@ class MainActivity : AppCompatActivity() {
             }
             "마스크" -> maskControls()
             "정보" -> {
-                controls.addView(text(p.name))
+                controls.addView(text("${p.width} × ${p.height} px"))
+                controls.addView(divider())
+                controls.addView(text("EXIF 촬영 정보").also { it.setTextColor(accent) })
                 val exif = runCatching {
                     androidx.exifinterface.media.ExifInterface(File(library.root, p.file))
                 }
@@ -697,7 +953,33 @@ class MainActivity : AppCompatActivity() {
                         "GPSAltitude",
                     )
                     .forEach { key ->
-                        exif?.getAttribute(key)?.let { controls.addView(text("$key · $it")) }
+                        exif?.getAttribute(key)?.let { value ->
+                            val names =
+                                mapOf(
+                                    "Make" to "카메라 제조사",
+                                    "Model" to "카메라",
+                                    "LensModel" to "렌즈",
+                                    "DateTimeOriginal" to "촬영 일시",
+                                    "ExposureTime" to "노출 시간",
+                                    "FNumber" to "조리개",
+                                    "PhotographicSensitivity" to "ISO",
+                                    "FocalLength" to "초점 거리",
+                                    "Software" to "소프트웨어",
+                                    "Artist" to "작가",
+                                    "Copyright" to "저작권",
+                                    "GPSLatitude" to "위도",
+                                    "GPSLongitude" to "경도",
+                                    "GPSAltitude" to "고도",
+                                )
+                            controls.addView(
+                                text(names[key] ?: key).also {
+                                    it.textSize = 10f
+                                    it.setTextColor(muted)
+                                }
+                            )
+                            controls.addView(text(value).also { it.textSize = 12f })
+                            controls.addView(divider())
+                        }
                     }
                 controls.addView(
                     button("별표 · ${p.rating}") {
@@ -710,21 +992,100 @@ class MainActivity : AppCompatActivity() {
                 )
             }
             "프리셋" -> {
-                listOf("오리지널", "알파인", "골든 아워", "소프트 필름", "딥 포레스트", "모노크롬").forEach { name ->
-                    controls.addView(button(name) { preset(name) })
+                controls.addView(
+                    button("＋  사진 추가") { pick(false) },
+                    LinearLayout.LayoutParams(-1, dp(34)).also {
+                        it.setMargins(dp(12), dp(6), dp(12), dp(6))
+                    },
+                )
+                val heading = row()
+                heading.addView(text("크리에이티브 프리셋"), LinearLayout.LayoutParams(0, -2, 1f))
+                heading.addView(text("6").also { it.setTextColor(muted) })
+                controls.addView(heading)
+                controls.addView(
+                    text("한 번의 터치로 새로운 분위기").also {
+                        it.textSize = 10f
+                        it.setTextColor(muted)
+                    }
+                )
+                val names = listOf("오리지널", "알파인", "골든 아워", "소프트 필름", "딥 포레스트", "모노크롬")
+                val captions =
+                    listOf(
+                        "있는 그대로의 순간",
+                        "맑고 선명한 공기",
+                        "따뜻하게 머무는 빛",
+                        "오래 간직한 기억처럼",
+                        "차분하고 깊은 색감",
+                        "빛과 그림자의 이야기",
+                    )
+                names.chunked(2).forEachIndexed { rowIndex, pair ->
+                    val r = row()
+                    pair.forEachIndexed { column, name ->
+                        val item =
+                            LinearLayout(this).also {
+                                it.gravity = Gravity.CENTER_VERTICAL
+                                it.setPadding(dp(6), dp(12), dp(6), dp(12))
+                            }
+                        item.addView(
+                            ImageView(this).also { image ->
+                                image.setImageBitmap(
+                                    assets.open("samples/alpine.jpg").use {
+                                        BitmapFactory.decodeStream(
+                                            it,
+                                            null,
+                                            BitmapFactory.Options().also { o ->
+                                                o.inSampleSize = 32
+                                            },
+                                        )
+                                    }
+                                )
+                                image.scaleType = ImageView.ScaleType.CENTER_CROP
+                            },
+                            LinearLayout.LayoutParams(dp(36), dp(38)),
+                        )
+                        val labels =
+                            LinearLayout(this).also { it.orientation = LinearLayout.VERTICAL }
+                        labels.addView(
+                            text(name).also {
+                                it.textSize = 11f
+                                it.setPadding(dp(7), 0, 0, dp(5))
+                            }
+                        )
+                        labels.addView(
+                            text(captions[rowIndex * 2 + column]).also {
+                                it.textSize = 8f
+                                it.setTextColor(muted)
+                                it.setPadding(dp(7), 0, 0, 0)
+                            }
+                        )
+                        item.addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
+                        item.addView(text("›").also { it.setPadding(0, 0, 0, 0) })
+                        item.setOnClickListener { preset(name) }
+                        item.contentDescription = name
+                        r.addView(item, LinearLayout.LayoutParams(0, dp(70), 1f))
+                    }
+                    controls.addView(r)
                 }
             }
         }
-        controls.addView(
-            button("모든 보정 초기화") {
-                edit { a ->
-                    val reset = NativePhoto.defaults()
-                    a.keys().asSequence().toList().forEach { a.remove(it) }
-                    reset.keys().forEach { a.put(it, reset.get(it)) }
+        resetFooter.removeAllViews()
+        if (selectedPanel != "프리셋") {
+            resetFooter.addView(divider())
+            resetFooter.addView(
+                button("모든 보정 초기화") {
+                    edit { a ->
+                        val reset = NativePhoto.defaults()
+                        a.keys().asSequence().toList().forEach { a.remove(it) }
+                        reset.keys().forEach { a.put(it, reset.get(it)) }
+                    }
+                    showControls()
                 }
-                showControls()
-            }
-        )
+            )
+            resetFooter.getChildAt(resetFooter.childCount - 1).layoutParams =
+                LinearLayout.LayoutParams(-1, dp(34)).also {
+                    it.setMargins(dp(12), dp(6), dp(12), dp(6))
+                }
+        }
     }
 
     private fun preset(name: String) {
@@ -908,8 +1269,7 @@ class MainActivity : AppCompatActivity() {
                         )
                     )
                     val bar = SeekBar(this)
-                    bar.progressTintList = ColorStateList.valueOf(accent)
-                    bar.thumbTintList = ColorStateList.valueOf(accent)
+                    styleSlider(bar)
                     bar.max = 1000
                     val min =
                         if (key == "exposure") -3.0
@@ -1012,47 +1372,132 @@ class MainActivity : AppCompatActivity() {
 
     private fun exportDialog() {
         val p = library.current ?: return
-        val options = listOf("JPEG", "PNG · 8비트", "PNG · 16비트", "PNG · 16비트 HDR PQ", "WebP")
-        choices("파일 형식", options) { label ->
-            val format = listOf("jpeg", "png", "png16", "hdr-png", "webp")[options.indexOf(label)]
-            fun dimensions(space: String, quality: Int) {
-                choices("이미지 크기", listOf("원본", "4096", "2048")) { size ->
-                    fun save(preserve: Boolean) {
-                        job {
-                            share(
-                                NativeExport.export(
-                                    this,
-                                    library,
-                                    p,
-                                    format,
-                                    space,
-                                    size.toIntOrNull() ?: 0,
-                                    quality,
-                                    preserve,
-                                )
-                            )
-                        }
-                    }
-                    AlertDialog.Builder(this)
-                        .setTitle("EXIF 메타데이터 보존")
-                        .setMessage("촬영 정보·GPS를 포함한 원본 EXIF를 유지할까요?")
-                        .setNegativeButton("제외") { _, _ -> save(false) }
-                        .setPositiveButton("보존") { _, _ -> save(true) }
-                        .show()
+        val formats = listOf("JPEG", "PNG · 8비트", "PNG · 16비트", "PNG · 16비트 HDR PQ", "WebP")
+        val keys = listOf("jpeg", "png", "png16", "hdr-png", "webp")
+        var format = "jpeg"
+        var space = if (p.settings.optString("colorSpace") == "display-p3") "display-p3" else "srgb"
+        var size = 0
+        var quality = 95
+        val card = LinearLayout(this).also { it.orientation = LinearLayout.VERTICAL }
+        val top = row().also { it.gravity = Gravity.END }
+        val close = button("×") {}
+        top.addView(close)
+        card.addView(top)
+        card.addView(
+            text("THE FINISHING TOUCH").also {
+                it.textSize = 9f
+                it.setTextColor(accent)
+                it.letterSpacing = .25f
+            }
+        )
+        card.addView(text("당신의 순간을 내보내세요.").also { it.textSize = 23f })
+        card.addView(
+            text("보정이 적용된 새로운 이미지로 저장합니다.").also {
+                it.textSize = 11f
+                it.setTextColor(muted)
+            }
+        )
+        lateinit var formatButton: Button
+        lateinit var spaceButton: Button
+        lateinit var sizeButton: Button
+        lateinit var qualityButton: Button
+        fun addField(title: String, value: String, action: () -> Unit): Button {
+            val caption =
+                text(title).also {
+                    it.textSize = 11f
+                    it.setTextColor(muted)
+                }
+            card.addView(caption)
+            return button("$value  ⌄", action).also {
+                it.tag = caption
+                it.gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                it.setTextColor(accent)
+                card.addView(it, LinearLayout.LayoutParams(-1, dp(40)))
+            }
+        }
+        formatButton =
+            addField("파일 형식", "JPEG") {
+                choices("파일 형식", formats) { value ->
+                    format = keys[formats.indexOf(value)]
+                    formatButton.text = "$value  ⌄"
+                    spaceButton.text =
+                        if (format == "hdr-png") "Rec.2020 / PQ · HDR"
+                        else if (space == "display-p3") "Display P3  ⌄" else "sRGB  ⌄"
+                    spaceButton.isEnabled = format != "hdr-png"
+                    qualityButton.visibility =
+                        if (format == "jpeg" || format == "webp") View.VISIBLE else View.GONE
+                    (qualityButton.tag as? View)?.visibility = qualityButton.visibility
                 }
             }
-            fun quality(space: String) {
-                if (format == "jpeg" || format == "webp")
-                    choices("출력 품질", listOf("100", "95", "85", "70")) { value ->
-                        dimensions(space, value.toInt())
-                    }
-                else dimensions(space, 100)
-            }
-            if (format == "hdr-png") quality("display-p3")
-            else
-                choices("출력 색공간", listOf("sRGB", "Display P3")) { space ->
-                    quality(if (space == "sRGB") "srgb" else "display-p3")
+        spaceButton =
+            addField("출력 색공간", if (space == "display-p3") "Display P3" else "sRGB") {
+                choices("출력 색공간", listOf("sRGB", "Display P3")) { value ->
+                    space = if (value == "sRGB") "srgb" else "display-p3"
+                    spaceButton.text = "$value  ⌄"
                 }
+            }
+        sizeButton =
+            addField("이미지 크기", "원본 해상도") {
+                choices("이미지 크기", listOf("원본 해상도", "긴 변 4096px", "긴 변 2048px")) { value ->
+                    size =
+                        if (value.contains("4096")) 4096
+                        else if (value.contains("2048")) 2048 else 0
+                    sizeButton.text = "$value  ⌄"
+                }
+            }
+        qualityButton =
+            addField("압축 품질", "95%") {
+                choices("압축 품질", listOf("100", "95", "85", "70")) { value ->
+                    quality = value.toInt()
+                    qualityButton.text = "$value%  ⌄"
+                }
+            }
+        val preserve =
+            CheckBox(this).also {
+                it.text = "EXIF 메타데이터 보존"
+                it.textSize = 12f
+                it.setTextColor(Color.LTGRAY)
+                it.buttonTintList = ColorStateList.valueOf(accent)
+                it.isChecked = true
+            }
+        card.addView(preserve)
+        card.addView(
+            text("촬영 정보·GPS 유지 · 방향과 크기는 보정 결과에 맞게 갱신").also {
+                it.textSize = 10f
+                it.setTextColor(muted)
+            }
+        )
+        val save = button("↓  이미지 저장·공유") {}
+        save.background =
+            GradientDrawable().also {
+                it.setColor(accent)
+                it.cornerRadius = dp(5).toFloat()
+            }
+        save.setTextColor(Color.rgb(35, 43, 31))
+        card.addView(save, LinearLayout.LayoutParams(-1, dp(42)))
+        val dialog = studioDialog(card)
+        close.setOnClickListener { dialog.dismiss() }
+        save.setOnClickListener {
+            val selectedFormat = format
+            val selectedSpace = space
+            val selectedSize = size
+            val selectedQuality = quality
+            val keepExif = preserve.isChecked
+            dialog.dismiss()
+            job {
+                share(
+                    NativeExport.export(
+                        this,
+                        library,
+                        p,
+                        selectedFormat,
+                        selectedSpace,
+                        selectedSize,
+                        selectedQuality,
+                        keepExif,
+                    )
+                )
+            }
         }
     }
 

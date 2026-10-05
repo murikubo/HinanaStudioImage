@@ -42,11 +42,11 @@ struct NativeStudioView: View {
           if geometry.size.width > 700 {
             HStack(spacing: 0) {
               preview(photo)
-              controls.frame(width: 340)
+              controls(wide: true).frame(width: 340)
             }
           } else {
             preview(photo).frame(maxHeight: geometry.size.height * 0.47)
-            controls
+            controls(wide: false)
           }
         } else {
           Spacer()
@@ -61,17 +61,17 @@ struct NativeStudioView: View {
         .dark)
     }
     .buttonStyle(StudioOutlineButtonStyle())
-    .sheet(isPresented: $about) {
-      VStack(spacing: 20) {
-        Image("StudioLogo").resizable().frame(width: 80, height: 80)
-        Text("HINANA Studio Image").font(.title2.bold())
-        Text("개발/제작자 비나래")
-        Text("Ver. \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")")
-        Text("Swift · Core Image · Metal 네이티브 편집기").font(.footnote)
-        Button("닫기") { about = false }
-      }.padding()
+    .toggleStyle(StudioCheckboxStyle())
+    .blur(radius: about || exporting ? 5 : 0)
+    .overlay { if about { aboutDialog } }
+    .overlay {
+      if exporting {
+        ZStack {
+          Color.black.opacity(0.6).ignoresSafeArea().onTapGesture { exporting = false }
+          exportSheet.frame(maxWidth: 440, maxHeight: 660).padding(12)
+        }
+      }
     }
-    .sheet(isPresented: $exporting) { exportSheet }
     .sheet(item: Binding(get: { sharing.map { SharedFile(url: $0) } }, set: { sharing = $0?.url }))
     { ActivitySheet(url: $0.url) }
     .confirmationDialog(
@@ -146,7 +146,8 @@ struct NativeStudioView: View {
       Button {
         picker = "project"
       } label: {
-        Image(systemName: "folder")
+        Image(systemName: "folder").frame(width: 38, height: 38).overlay(
+          RoundedRectangle(cornerRadius: 5).stroke(Color.white.opacity(0.18)))
       }.accessibilityLabel("프로젝트 열기")
       Button {
         about = true
@@ -156,7 +157,7 @@ struct NativeStudioView: View {
       Button {
         saveProject()
       } label: {
-        Image(systemName: "externaldrive")
+        Image(systemName: "square.and.arrow.down")
       }.accessibilityLabel("프로젝트 저장")
       Button {
         if let p = library.current {
@@ -164,7 +165,9 @@ struct NativeStudioView: View {
           exporting = true
         }
       } label: {
-        Image(systemName: "arrow.down.to.line")
+        Image(systemName: "arrow.down.to.line").foregroundStyle(accent).frame(width: 38, height: 38)
+          .background(accent.opacity(0.035)).overlay(
+            RoundedRectangle(cornerRadius: 5).stroke(accent.opacity(0.55)))
       }.accessibilityLabel("내보내기").disabled(library.current == nil)
     }.buttonStyle(StudioIconButtonStyle()).foregroundStyle(Color(white: 0.72)).font(
       .system(size: 20)
@@ -175,18 +178,25 @@ struct NativeStudioView: View {
     VStack(spacing: 0) {
       HStack {
         VStack(alignment: .leading) {
-          Text(photo.name).font(.subheadline).lineLimit(1)
-          Text("\(photo.width) × \(photo.height) · 비파괴 편집").font(.caption2).foregroundStyle(
+          Text(URL(fileURLWithPath: photo.name).deletingPathExtension().lastPathComponent).font(
+            .subheadline
+          ).lineLimit(1)
+          Text(
+            "\(URL(fileURLWithPath: photo.name).pathExtension.uppercased())   ·   \(photo.width) × \(photo.height)   ·   비파괴 편집"
+          ).font(.caption2).foregroundStyle(
             .secondary)
         }
         Spacer()
-        Text(photo.settings.hdr ? "HDR" : "SDR").font(.caption).foregroundStyle(accent)
+        Text(isEdited(photo) ? "보정됨  •" : "원본").font(.caption).foregroundStyle(accent).padding(
+          .horizontal, 10
+        ).padding(.vertical, 7).overlay(
+          RoundedRectangle(cornerRadius: 4).stroke(accent.opacity(0.22)))
       }.padding(.horizontal, 12).padding(.vertical, 6)
       NativeCanvas(
         library: library, compare: compare, proofSDR: proof, maskID: panel == "마스크" ? maskID : "",
         maskTool: maskTool, overlay: overlay, zoomRequest: zoomRequest, zoomRevision: zoomRevision,
         onZoom: { zoomLabel = $0 }, onHistogram: { histogram = $0 }, onPoints: maskPoints)
-      HStack {
+      HStack(spacing: 1) {
         Menu {
           ForEach(["original", "1:1", "4:5", "3:2", "16:9"], id: \.self) { crop in
             Button(crop == "original" ? "원본 비율" : crop) {
@@ -194,7 +204,10 @@ struct NativeStudioView: View {
             }
           }
         } label: {
-          Image(systemName: "crop")
+          HStack(spacing: 4) {
+            Image(systemName: "crop")
+            Text("자르기").font(.system(size: 11))
+          }
         }.accessibilityLabel("자르기")
         Button {
           library.edit {
@@ -206,7 +219,7 @@ struct NativeStudioView: View {
         Button {
           library.edit { $0.values["flip"] = (!$0.flip) }
         } label: {
-          Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right")
+          Image(systemName: "arrow.left.arrow.right")
         }.accessibilityLabel("좌우 반전")
         Button {
           library.undo()
@@ -218,6 +231,21 @@ struct NativeStudioView: View {
         } label: {
           Image(systemName: "arrow.uturn.forward")
         }.accessibilityLabel("다시 실행")
+        Spacer(minLength: 0)
+        Button {
+          compare.toggle()
+        } label: {
+          HStack(spacing: 4) {
+            Image(systemName: "arrow.left.arrow.right")
+            Text("원본 비교").font(.system(size: 10))
+          }
+        }.accessibilityLabel("원본 비교").foregroundStyle(compare ? accent : Color(white: 0.55))
+        Button {
+          zoomRequest = 0
+          zoomRevision += 1
+        } label: {
+          Image(systemName: "viewfinder")
+        }.accessibilityLabel("사진 맞춤")
         Menu {
           ForEach([0.0, 10, 25, 50, 100, 200, 400], id: \.self) { value in
             Button(value == 0 ? "맞춤" : "\(Int(value))%") {
@@ -226,17 +254,20 @@ struct NativeStudioView: View {
             }
           }
         } label: {
-          Text(zoomLabel).font(.caption.monospacedDigit())
+          HStack(spacing: 4) {
+            Text(zoomLabel).foregroundStyle(accent)
+            Image(systemName: "chevron.down").font(.system(size: 9))
+          }
         }
-        Spacer()
         Button {
-          compare.toggle()
+          zoomRequest = min(400, (Double(zoomLabel.dropLast()) ?? 25) * 1.5)
+          zoomRevision += 1
         } label: {
-          Image(systemName: compare ? "eye.fill" : "eye")
-        }.accessibilityLabel("원본 비교")
+          Image(systemName: "plus.magnifyingglass")
+        }.accessibilityLabel("사진 확대")
       }.buttonStyle(StudioIconButtonStyle()).foregroundStyle(Color(white: 0.58)).font(
         .system(size: 17)
-      ).padding(.horizontal, 8).frame(height: 46).overlay(alignment: .bottom) { Divider() }
+      ).padding(.horizontal, 8).frame(height: 40).overlay(alignment: .bottom) { Divider() }
     }
   }
   private var bottomNavigation: some View {
@@ -265,14 +296,43 @@ struct NativeStudioView: View {
         .background(active ? accent.opacity(0.055) : .clear)
     }.buttonStyle(.plain)
   }
+  private func isEdited(_ photo: NativePhoto) -> Bool {
+    let defaults = NativeSettings()
+    return !photo.settings.masks.isEmpty || photo.settings.flip
+      || photo.settings.string("crop") != "original"
+      || [
+        "exposure", "contrast", "highlights", "shadows", "whites", "blacks", "temperature", "tint",
+        "vibrance", "saturation", "fade", "vignette", "skinSmooth", "skinRedness", "skinBrightness",
+        "rotation", "hdrHighlights", "curveShadows", "curveMidtones", "curveHighlights",
+      ].contains { photo.settings[$0] != defaults[$0] }
+      || NativeSettings.bands.contains { band in
+        ["hue", "saturation", "luminance"].contains { photo.settings["mixer_\(band)_\($0)"] != 0 }
+      }
+  }
   private var libraryGrid: some View {
-    VStack {
-      HStack {
-        TextField("사진 검색", text: $query).textFieldStyle(.roundedBorder)
-        Toggle("별표", isOn: $stars).fixedSize()
-      }.padding()
-      ScrollView {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 145))]) {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 18) {
+        Text("YOUR PERSPECTIVE").font(.system(size: 9, weight: .semibold)).tracking(3)
+          .foregroundStyle(accent)
+        Text("순간을 모으다.").font(.system(size: 27, weight: .light))
+        Text("사진을 선택하고 나만의 시선으로 완성해 보세요.").font(.system(size: 12)).foregroundStyle(.secondary)
+        HStack {
+          Image(systemName: "magnifyingglass")
+          TextField("사진 검색", text: $query)
+        }
+        .font(.system(size: 13)).padding(12).overlay(
+          RoundedRectangle(cornerRadius: 5).stroke(Color.white.opacity(0.15))
+        ).padding(.vertical, 10)
+        HStack {
+          Text("사진을 길게 누르면 삭제할 수 있습니다.").font(.system(size: 11)).foregroundStyle(.secondary)
+          Spacer()
+          Button {
+            stars.toggle()
+          } label: {
+            Image(systemName: stars ? "star.fill" : "star")
+          }.buttonStyle(.plain).accessibilityLabel("별표 사진만")
+        }
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 145))], spacing: 16) {
           ForEach(
             library.photos.filter {
               (!stars || $0.rating > 0)
@@ -284,15 +344,22 @@ struct NativeStudioView: View {
               section = "편집"
               library.persist()
             } label: {
-              VStack(alignment: .leading) {
-                NativeThumbnail(url: library.url(photo)).frame(height: 140).clipped()
-                Text(photo.name).lineLimit(1).font(.caption)
-                Text(String(repeating: "★", count: photo.rating)).font(.caption).foregroundStyle(
-                  accent)
-              }.padding(6).background(Color.white.opacity(0.04)).clipShape(
-                RoundedRectangle(cornerRadius: 8))
-            }
-            .contextMenu {
+              VStack(alignment: .leading, spacing: 12) {
+                NativeThumbnail(url: library.url(photo)).frame(height: 145).clipped().clipShape(
+                  RoundedRectangle(cornerRadius: 3))
+                Text(photo.name).lineLimit(1).font(.system(size: 12)).foregroundStyle(
+                  Color(white: 0.8))
+                Text("\(photo.width) × \(photo.height)").font(.system(size: 11)).foregroundStyle(
+                  .secondary)
+              }.padding(8).frame(maxWidth: .infinity, alignment: .leading).background(
+                Color(white: 0.13)
+              )
+              .overlay(
+                RoundedRectangle(cornerRadius: 5).stroke(
+                  photo.id == library.selected ? accent : Color.white.opacity(0.15))
+              )
+              .clipShape(RoundedRectangle(cornerRadius: 5))
+            }.buttonStyle(.plain).contextMenu {
               Button(role: .destructive) {
                 removing = photo
               } label: {
@@ -300,16 +367,15 @@ struct NativeStudioView: View {
               }
             }
           }
-        }.padding(.horizontal)
-      }
+        }
+      }.padding(12).padding(.top, 12)
     }
   }
-  private var controls: some View {
+  private func controls(wide: Bool) -> some View {
     VStack(spacing: 0) {
-      NativeHistogramView(bins: histogram).frame(height: 36).padding(.horizontal, 14)
+      if wide { NativeHistogramView(bins: histogram).frame(height: 60).padding(14) }
       if panel == "프리셋" {
-        Text("크리에이티브 프리셋").font(.caption).frame(maxWidth: .infinity, alignment: .leading).padding(
-          14)
+        EmptyView()
       } else {
         HStack(spacing: 0) {
           ForEach(
@@ -378,11 +444,18 @@ struct NativeStudioView: View {
           } else {
             presetControls
           }
-          Divider()
-          Button("모든 보정 초기화") { library.edit { $0 = NativeSettings() } }.frame(maxWidth: .infinity)
+
         }.padding(14)
       }
-    }.background(Color.white.opacity(0.035))
+      if panel != "프리셋" {
+        Divider()
+        Button {
+          library.edit { $0 = NativeSettings() }
+        } label: {
+          Label("모든 보정 초기화", systemImage: "arrow.counterclockwise").frame(maxWidth: .infinity)
+        }.padding(.horizontal, 12).padding(.vertical, 7)
+      }
+    }.background(Color(white: 0.12))
   }
   private func slider(_ title: String, _ key: String, _ range: ClosedRange<Double> = -100...100)
     -> some View
@@ -407,61 +480,149 @@ struct NativeStudioView: View {
       ).frame(height: 28).accessibilityLabel(title)
     }
   }
-  private var colorSettings: some View {
-    VStack {
-      Picker(
-        "편집 정밀도",
-        selection: Binding(
-          get: { library.current?.settings.string("precision") ?? "float" },
-          set: { value in
-            library.edit {
-              $0.values["precision"] = value
-              if value == "legacy" { $0.values["dynamicRange"] = "sdr" }
-            }
-          })
-      ) {
-        Text("8비트").tag("legacy")
-        Text("32비트 부동소수점").tag("float")
-      }
-      Picker(
-        "작업 색공간",
-        selection: Binding(
-          get: { library.current?.settings.string("colorSpace") ?? "srgb" },
-          set: { value in library.edit { $0.values["colorSpace"] = value } })
-      ) {
-        Text("sRGB").tag("srgb")
-        Text("Display P3").tag("display-p3")
-      }
-      Toggle(
-        "HDR 편집",
-        isOn: Binding(
-          get: { library.current?.settings.hdr ?? false },
-          set: { value in
-            library.edit {
-              $0.values["dynamicRange"] = value ? "hdr" : "sdr"
-              $0.values["precision"] = "float"
-            }
-          }))
-      if library.current?.settings.hdr == true {
-        Picker(
-          "HDR 최대 밝기",
-          selection: Binding(
-            get: { Int(library.current?.settings["hdrPeak"] ?? 1000) },
-            set: { value in library.edit { $0["hdrPeak"] = Double(value) } })
-        ) { ForEach([400, 1000, 2000, 4000], id: \.self) { Text("\($0) nit").tag($0) } }
-        slider("HDR 하이라이트 확장", "hdrHighlights", 0...100)
-        Toggle("SDR 변환 미리보기", isOn: $proof)
-      }
-      Text("고정밀 GPU 편집 · 원본 파일 유지").font(.caption2).foregroundStyle(.secondary)
+  private func selectionRow(
+    _ title: String, _ selected: String, options: [(String, String)],
+    action: @escaping (String) -> Void
+  ) -> some View {
+    HStack(spacing: 10) {
+      Text(title).font(.system(size: 11)).foregroundStyle(accent.opacity(0.85)).frame(
+        width: 76, alignment: .leading)
+      Menu {
+        ForEach(options, id: \.0) { key, label in Button(label) { action(key) } }
+      } label: {
+        HStack {
+          Text(selected).font(.system(size: 13))
+          Spacer()
+          Image(systemName: "chevron.down").font(.system(size: 10))
+        }
+        .foregroundStyle(accent).padding(11).frame(maxWidth: .infinity).background(
+          Color(red: 0.10, green: 0.12, blue: 0.10)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 5).stroke(accent.opacity(0.22))).clipShape(
+          RoundedRectangle(cornerRadius: 5))
+      }.buttonStyle(.plain)
     }
   }
-  private var presetControls: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      ForEach(["오리지널", "알파인", "골든 아워", "소프트 필름", "딥 포레스트", "모노크롬"], id: \.self) { name in
-        Button(name) { applyPreset(name) }.frame(maxWidth: .infinity, alignment: .leading).padding(
-          12
-        ).background(Color.white.opacity(0.04)).clipShape(RoundedRectangle(cornerRadius: 8))
+  private var colorSettings: some View {
+    VStack(alignment: .leading, spacing: 9) {
+      selectionRow(
+        "편집 정밀도",
+        library.current?.settings.string("precision") == "legacy" ? "기존 8비트" : "32비트 부동소수점",
+        options: [("legacy", "기존 8비트"), ("float", "32비트 부동소수점")]
+      ) { value in
+        library.edit {
+          $0.values["precision"] = value
+          if value == "legacy" { $0.values["dynamicRange"] = "sdr" }
+        }
       }
+      selectionRow(
+        "밝기 범위", library.current?.settings.hdr == true ? "HDR" : "SDR",
+        options: [("sdr", "SDR"), ("hdr", "HDR")]
+      ) { value in
+        library.edit {
+          $0.values["dynamicRange"] = value
+          if value == "hdr" { $0.values["precision"] = "float" }
+        }
+      }
+      if library.current?.settings.hdr == true {
+        selectionRow(
+          "HDR 최대 밝기", "\(Int(library.current?.settings["hdrPeak"] ?? 1000)) nit",
+          options: [400, 1000, 2000, 4000].map { (String($0), "\($0) nit") }
+        ) { value in library.edit { $0["hdrPeak"] = Double(value) ?? 1000 } }
+        slider("HDR 밝은 영역 확장", "hdrHighlights", 0...100)
+        Text("HDR 전환은 밝기를 자동으로 높이지 않습니다. SDR 사진의 밝은 영역을 확장하려면 이 값을 올리세요.").font(.system(size: 10))
+          .foregroundStyle(.secondary)
+        Toggle("SDR 밝기 변환 미리보기", isOn: $proof).font(.system(size: 11))
+      }
+      selectionRow(
+        "작업 색공간",
+        library.current?.settings.string("colorSpace") == "display-p3" ? "Display P3" : "sRGB",
+        options: [("srgb", "sRGB"), ("display-p3", "Display P3")]
+      ) { value in library.edit { $0.values["colorSpace"] = value } }
+    }
+  }
+  private let presetNames = ["오리지널", "알파인", "골든 아워", "소프트 필름", "딥 포레스트", "모노크롬"]
+  private let presetCaptions = [
+    "있는 그대로의 순간", "맑고 선명한 공기", "따뜻하게 머무는 빛", "오래 간직한 기억처럼", "차분하고 깊은 색감", "빛과 그림자의 이야기",
+  ]
+  private var presetControls: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Button {
+        picker = "source"
+      } label: {
+        Label("사진 추가", systemImage: "plus").frame(maxWidth: .infinity, alignment: .leading)
+      }
+      HStack {
+        Text("크리에이티브 프리셋").font(.system(size: 11, weight: .semibold))
+        Spacer()
+        Text("6").font(.caption).foregroundStyle(.secondary)
+      }.padding(.top, 10)
+      Text("한 번의 터치로 새로운 분위기").font(.system(size: 10)).foregroundStyle(.secondary)
+      LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+        ForEach(Array(presetNames.enumerated()), id: \.offset) { index, name in
+          Button {
+            applyPreset(name)
+          } label: {
+            HStack(spacing: 9) {
+              Image("StudioSample").resizable().scaledToFill().frame(width: 36, height: 38)
+                .clipped().saturation(index == 5 ? 0 : 1).colorMultiply(
+                  index == 2 ? Color(red: 1, green: 0.85, blue: 0.65) : .white
+                ).clipShape(RoundedRectangle(cornerRadius: 3))
+              VStack(alignment: .leading, spacing: 5) {
+                Text(name).font(.system(size: 11))
+                Text(presetCaptions[index]).font(.system(size: 8)).foregroundStyle(.secondary)
+                  .lineLimit(1)
+              }
+              Spacer(minLength: 0)
+              Image(systemName: "chevron.right").font(.system(size: 9)).foregroundStyle(.secondary)
+            }.padding(6).frame(maxWidth: .infinity, minHeight: 64).background(
+              Color.white.opacity(index == 0 ? 0.025 : 0)
+            ).clipShape(RoundedRectangle(cornerRadius: 5))
+          }.buttonStyle(.plain)
+        }
+      }
+    }
+  }
+  private var aboutDialog: some View {
+    ZStack {
+      Color.black.opacity(0.6).ignoresSafeArea().onTapGesture { about = false }
+      VStack(spacing: 20) {
+        HStack {
+          Spacer()
+          Button {
+            about = false
+          } label: {
+            Image(systemName: "xmark")
+          }.buttonStyle(.plain).foregroundStyle(.secondary)
+        }
+        Image("StudioLogo").resizable().frame(width: 86, height: 86).clipShape(
+          RoundedRectangle(cornerRadius: 18))
+        Text("HINANA STUDIO IMAGE").font(.system(size: 21, weight: .bold)).tracking(1)
+          .minimumScaleFactor(0.65).lineLimit(1)
+        Text("당신의 시선으로 빛과 색을 다듬는 사진 작업실").font(.system(size: 11)).foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+          aboutRow("프로그램 명", "Hinana Studio Image")
+          aboutRow("개발/제작자", "비나래")
+          aboutRow(
+            "버전",
+            "Ver. \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")")
+        }.padding(.top, 12)
+      }.padding(22).padding(.bottom, 4).frame(maxWidth: 440).background(
+        Color(red: 0.12, green: 0.12, blue: 0.15)
+      )
+      .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.18))).clipShape(
+        RoundedRectangle(cornerRadius: 12)
+      ).padding(12)
+    }
+  }
+  private func aboutRow(_ title: String, _ value: String) -> some View {
+    VStack(spacing: 0) {
+      Divider()
+      HStack {
+        Text(title).foregroundStyle(.secondary)
+        Spacer()
+        Text(value).fontWeight(.semibold)
+      }.font(.system(size: 12)).padding(.vertical, 16)
     }
   }
   private func applyPreset(_ name: String) {
@@ -682,11 +843,22 @@ struct NativeStudioView: View {
       }
     }
   }
+  private var exifLabels: [String: String] {
+    [
+      "Make": "카메라 제조사", "Model": "카메라", "LensModel": "렌즈", "DateTimeOriginal": "촬영 일시",
+      "DateTimeDigitized": "디지털화 일시", "ExposureTime": "노출 시간", "FNumber": "조리개",
+      "ISOSpeedRatings": "ISO", "FocalLength": "초점 거리", "ExposureBiasValue": "노출 보정",
+      "Software": "소프트웨어", "Artist": "작가", "Copyright": "저작권", "Latitude": "위도", "Longitude": "경도",
+      "Altitude": "고도", "PixelXDimension": "가로 픽셀", "PixelYDimension": "세로 픽셀", "ColorSpace": "색공간",
+      "Orientation": "방향",
+    ]
+  }
   private var information: some View {
     VStack(alignment: .leading, spacing: 12) {
       if let photo = library.current {
-        Text(photo.name).bold()
-        Text("\(photo.width) × \(photo.height)")
+        Text("\(photo.width) × \(photo.height) px").font(.system(size: 12))
+        Divider()
+        Text("EXIF 촬영 정보").font(.system(size: 12, weight: .semibold)).foregroundStyle(accent)
         HStack {
           ForEach(1...5, id: \.self) { n in
             Button {
@@ -710,11 +882,11 @@ struct NativeStudioView: View {
           ) { key in
             if let dict = props[key] as? [String: Any] {
               ForEach(dict.keys.sorted(), id: \.self) { k in
-                HStack {
-                  Text(k).font(.caption)
-                  Spacer()
-                  Text(String(describing: dict[k]!)).font(.caption).lineLimit(2)
-                }
+                VStack(alignment: .leading, spacing: 10) {
+                  Text(exifLabels[k] ?? k).font(.system(size: 10)).foregroundStyle(.secondary)
+                  Text(String(describing: dict[k]!)).font(.system(size: 12)).lineLimit(3)
+                  Divider()
+                }.padding(.vertical, 6)
               }
             }
           }
@@ -724,46 +896,67 @@ struct NativeStudioView: View {
     }
   }
   private var exportSheet: some View {
-    NavigationView {
-      Form {
-        Picker("파일 형식", selection: $exportFormat) {
-          Text("JPEG").tag("jpeg")
-          Text("PNG · 8비트").tag("png")
-          Text("PNG · 16비트").tag("png16")
-          Text("PNG · 16비트 HDR PQ").tag("hdr-png")
-          Text("WebP").tag("webp")
+    ScrollView {
+      VStack(alignment: .leading, spacing: 18) {
+        HStack {
+          Image(systemName: "arrow.down.to.line").font(.system(size: 24)).foregroundStyle(accent)
+          Spacer()
+          Button {
+            exporting = false
+          } label: {
+            Image(systemName: "xmark")
+          }.buttonStyle(.plain)
         }
+        Text("THE FINISHING TOUCH").font(.system(size: 9)).tracking(3).foregroundStyle(accent)
+          .padding(.top, 10)
+        Text("당신의 순간을 내보내세요.").font(.system(size: 23, weight: .light))
+        Text("보정이 적용된 새로운 이미지로 저장합니다.").font(.system(size: 11)).foregroundStyle(.secondary)
+        selectionRow(
+          "파일 형식", exportFormats.first { $0.0 == exportFormat }?.1 ?? "JPEG", options: exportFormats
+        ) { exportFormat = $0 }
         if exportFormat == "hdr-png" {
-          HStack {
-            Text("출력 색공간")
-            Spacer()
-            Text("Rec.2020 / PQ · HDR").foregroundStyle(.secondary)
-          }
+          Text("출력 색공간   Rec.2020 / PQ · HDR").font(.system(size: 12)).foregroundStyle(accent)
         } else {
-          Picker("출력 색공간", selection: $exportSpace) {
-            Text("sRGB").tag("srgb")
-            Text("Display P3").tag("display-p3")
-          }
+          selectionRow(
+            "출력 색공간", exportSpace == "display-p3" ? "Display P3" : "sRGB",
+            options: [("srgb", "sRGB"), ("display-p3", "Display P3")]
+          ) { exportSpace = $0 }
         }
-        Picker("이미지 크기", selection: $exportSize) {
-          Text("원본 해상도").tag(0.0)
-          Text("긴 변 4096px").tag(4096.0)
-          Text("긴 변 2048px").tag(2048.0)
-        }
+        selectionRow(
+          "이미지 크기", exportSize == 0 ? "원본 해상도" : "긴 변 \(Int(exportSize))px",
+          options: [("0", "원본 해상도"), ("4096", "긴 변 4096px"), ("2048", "긴 변 2048px")]
+        ) { exportSize = Double($0) ?? 0 }
         if exportFormat == "jpeg" || exportFormat == "webp" {
           HStack {
-            Text("품질")
+            Text("압축 품질")
             Spacer()
             Text("\(Int(quality*100))%")
-          }
-          Slider(value: $quality, in: 0.1...1) { Text("품질") }
+          }.font(.system(size: 11))
+          StudioSlider(value: $quality, in: 0.1...1, onEditingChanged: { _ in }).frame(height: 28)
         }
-        Toggle("EXIF 메타데이터 보존", isOn: $preserve)
-        Button("이미지 저장·공유") { exportImage() }
-      }.navigationTitle("내보내기").toolbar {
-        ToolbarItem(placement: .cancellationAction) { Button("닫기") { exporting = false } }
-      }
-    }
+        Toggle("EXIF 메타데이터 보존", isOn: $preserve).font(.system(size: 12))
+        Text("촬영 정보·GPS 등 원본 EXIF 유지 · 방향과 크기는 보정 결과에 맞게 갱신").font(.system(size: 10))
+          .foregroundStyle(.secondary).padding(12).background(Color.black.opacity(0.12)).clipShape(
+            RoundedRectangle(cornerRadius: 5))
+        Button {
+          exportImage()
+        } label: {
+          Label("이미지 저장·공유", systemImage: "arrow.down.to.line").font(
+            .system(size: 13, weight: .semibold)
+          ).frame(maxWidth: .infinity).padding(13).background(accent).foregroundStyle(
+            Color(white: 0.15)
+          ).clipShape(RoundedRectangle(cornerRadius: 5))
+        }.buttonStyle(.plain)
+      }.padding(22)
+    }.background(Color(red: 0.12, green: 0.14, blue: 0.13)).clipShape(
+      RoundedRectangle(cornerRadius: 12)
+    ).overlay(RoundedRectangle(cornerRadius: 12).stroke(accent.opacity(0.2)))
+  }
+  private var exportFormats: [(String, String)] {
+    [
+      ("jpeg", "JPEG"), ("png", "PNG · 8비트"), ("png16", "PNG · 16비트"),
+      ("hdr-png", "PNG · 16비트 HDR PQ"), ("webp", "WebP"),
+    ]
   }
   private func saveProject() {
     guard !library.busy else { return }
@@ -1025,5 +1218,20 @@ private final class StudioThinSlider: UISlider {
   override func trackRect(forBounds bounds: CGRect) -> CGRect {
     let rect = super.trackRect(forBounds: bounds)
     return CGRect(x: rect.minX, y: rect.midY - 1, width: rect.width, height: 2)
+  }
+}
+
+private struct StudioCheckboxStyle: ToggleStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    Button {
+      configuration.isOn.toggle()
+    } label: {
+      HStack(spacing: 9) {
+        Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square").foregroundStyle(
+          configuration.isOn ? Color(red: 0.81, green: 0.87, blue: 0.7) : Color(white: 0.5))
+        configuration.label.foregroundStyle(Color(white: 0.7))
+        Spacer(minLength: 0)
+      }.frame(minHeight: 32)
+    }.buttonStyle(.plain).accessibilityValue(configuration.isOn ? "켜짐" : "꺼짐")
   }
 }
