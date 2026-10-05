@@ -37,6 +37,9 @@ class MainActivity : AppCompatActivity() {
     private var selectedMask = ""
     private var tool = "add"
     private var comparing = false
+    private lateinit var bottom: LinearLayout
+    private var panelTabs: LinearLayout? = null
+    private val muted = Color.rgb(137, 145, 146)
     private val accent = Color.rgb(207, 223, 178)
 
     override fun onCreate(state: Bundle?) {
@@ -76,41 +79,33 @@ class MainActivity : AppCompatActivity() {
         header.addView(
             TextView(this).also {
                 it.text = "HINANA\nStudio Image"
-                it.setTextColor(accent)
-                it.textSize = 14f
+                it.setPadding(dp(8), 0, 0, 0)
+                it.gravity = Gravity.CENTER_VERTICAL
+                it.setTextColor(Color.rgb(213, 216, 215))
+                it.textSize = 12f
             },
             LinearLayout.LayoutParams(0, dp(52), 1f),
         )
-        header.addView(button("열기") { pick(true) })
+        header.addView(iconButton("열기") { pick(true) })
         header.addView(
-            button("ⓘ") {
+            iconButton("ⓘ") {
                 alert(
                     "HINANA Studio Image\nVer. ${BuildConfig.VERSION_NAME}\n개발/제작자 비나래\n네이티브 GPU 편집기"
                 )
             }
         )
-        header.addView(button("저장") { job { share(library.project()) } })
-        header.addView(button("내보내기") { exportDialog() })
-        root.addView(header)
+        header.addView(iconButton("저장") { job { share(library.project()) } })
+        header.addView(iconButton("내보내기") { exportDialog() })
+        header.setBackgroundColor(Color.rgb(27, 29, 30))
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(60)))
+        root.addView(divider())
         body = LinearLayout(this).also { it.orientation = LinearLayout.VERTICAL }
         root.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
-        val bottom = row()
-        bottom.gravity = Gravity.CENTER
-        bottom.addView(button("사진 추가") { pick(false) })
-        bottom.addView(button("사진") { showLibrary() })
-        bottom.addView(
-            button("편집") {
-                selectedPanel = "편집"
-                showEditor()
-            }
-        )
-        bottom.addView(
-            button("프리셋") {
-                selectedPanel = "프리셋"
-                showEditor()
-            }
-        )
-        root.addView(bottom)
+        bottom = row()
+        bottom.setBackgroundColor(Color.rgb(27, 29, 30))
+        root.addView(divider())
+        root.addView(bottom, LinearLayout.LayoutParams(-1, dp(64)))
+        updateNavigation()
         if (migrating) body.addView(text("기존 작업 공간을 네이티브 저장소로 옮기는 중…"))
         if (!library.manifest.exists())
             LegacyMigration(
@@ -145,8 +140,9 @@ class MainActivity : AppCompatActivity() {
         Button(this).also {
             it.isEnabled = !migrating
             it.text = title
-            it.setTextColor(accent)
+            it.setTextColor(Color.rgb(185, 191, 187))
             it.textSize = 12f
+            it.isAllCaps = false
             it.minWidth = 0
             it.minimumWidth = 0
             it.setPadding(dp(10), 0, dp(10), 0)
@@ -154,9 +150,9 @@ class MainActivity : AppCompatActivity() {
             it.contentDescription = title
             val shape =
                 GradientDrawable().also { d ->
-                    d.setColor(Color.rgb(36, 42, 38))
-                    d.cornerRadius = dp(8).toFloat()
-                    d.setStroke(dp(1), Color.rgb(68, 77, 59))
+                    d.setColor(Color.TRANSPARENT)
+                    d.cornerRadius = dp(4).toFloat()
+                    d.setStroke(dp(1), Color.rgb(60, 65, 62))
                 }
             it.background =
                 RippleDrawable(ColorStateList.valueOf(Color.argb(50, 207, 223, 178)), shape, null)
@@ -164,6 +160,110 @@ class MainActivity : AppCompatActivity() {
             layout.setMargins(dp(3), dp(3), dp(3), dp(3))
             it.layoutParams = layout
         }
+
+    private fun divider() =
+        View(this).also {
+            it.setBackgroundColor(Color.rgb(48, 52, 53))
+            it.layoutParams = LinearLayout.LayoutParams(-1, dp(1))
+        }
+
+    private fun iconButton(title: String, action: () -> Unit): Button =
+        button(title, action).also {
+            it.text = ""
+            it.background = RippleDrawable(ColorStateList.valueOf(0x20ffffff), null, null)
+            it.setCompoundDrawablesWithIntrinsicBounds(null, null, null, null)
+            val icon = StudioIcon(title, muted).also { d -> d.setBounds(0, 0, dp(21), dp(21)) }
+            it.setCompoundDrawables(icon, null, null, null)
+            it.setPadding(dp(10), 0, dp(10), 0)
+            it.layoutParams = LinearLayout.LayoutParams(dp(42), dp(44))
+        }
+
+    private fun updateNavigation() {
+        if (!::bottom.isInitialized) return
+        bottom.removeAllViews()
+        listOf("사진 추가", "사진", "편집", "프리셋").forEach { title ->
+            val active =
+                if (title == "사진") libraryVisible
+                else
+                    !libraryVisible &&
+                        (if (title == "프리셋") selectedPanel == title
+                        else title == "편집" && selectedPanel != "프리셋")
+            val item =
+                button(title) {
+                    when (title) {
+                        "사진 추가" -> pick(false)
+                        "사진" -> showLibrary()
+                        else -> {
+                            selectedPanel = title
+                            showEditor()
+                        }
+                    }
+                }
+            val color = if (active) accent else muted
+            item.setTextColor(color)
+            val icon = StudioIcon(title, color).also { it.setBounds(0, 0, dp(22), dp(22)) }
+            item.setCompoundDrawables(null, icon, null, null)
+            item.compoundDrawablePadding = dp(5)
+            item.gravity = Gravity.CENTER
+            item.setPadding(0, dp(7), 0, dp(5))
+            item.background =
+                RippleDrawable(
+                    ColorStateList.valueOf(0x20ffffff),
+                    GradientDrawable().also {
+                        it.setColor(if (active) Color.rgb(36, 40, 36) else Color.TRANSPARENT)
+                    },
+                    null,
+                )
+            bottom.addView(item, LinearLayout.LayoutParams(0, -1, 1f))
+        }
+    }
+
+    private fun updateTabs() {
+        val tabs = panelTabs ?: return
+        for (i in 0 until tabs.childCount) {
+            val tab = tabs.getChildAt(i) as Button
+            val active = tab.contentDescription == selectedPanel
+            val color = if (active) accent else muted
+            tab.setTextColor(color)
+            val icon =
+                StudioIcon(tab.contentDescription.toString(), color).also {
+                    it.setBounds(0, 0, dp(14), dp(14))
+                }
+            tab.setCompoundDrawables(icon, null, null, null)
+            tab.compoundDrawablePadding = dp(4)
+            tab.setPadding(dp(6), 0, dp(6), 0)
+            tab.textSize = 11f
+            tab.background =
+                android.graphics.drawable
+                    .LayerDrawable(
+                        arrayOf(
+                            GradientDrawable().also { it.setColor(Color.TRANSPARENT) },
+                            GradientDrawable().also {
+                                it.setColor(if (active) accent else Color.TRANSPARENT)
+                            },
+                        )
+                    )
+                    .also {
+                        it.setLayerGravity(1, Gravity.BOTTOM)
+                        it.setLayerHeight(1, dp(2))
+                        it.setLayerInset(1, dp(12), 0, dp(12), 0)
+                    }
+        }
+    }
+
+    private fun styleSlider(bar: SeekBar) {
+        bar.progressTintList = ColorStateList.valueOf(Color.rgb(129, 139, 134))
+        bar.progressBackgroundTintList = ColorStateList.valueOf(Color.rgb(70, 76, 74))
+        bar.splitTrack = false
+        bar.thumb =
+            GradientDrawable().also {
+                it.shape = GradientDrawable.OVAL
+                it.setSize(dp(13), dp(13))
+                it.setColor(Color.rgb(30, 33, 32))
+                it.setStroke(dp(2), Color.rgb(165, 177, 163))
+            }
+        bar.minimumHeight = dp(28)
+    }
 
     private fun text(title: String) =
         TextView(this).also {
@@ -257,6 +357,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showLibrary() {
         libraryVisible = true
+        updateNavigation()
         if (::canvas.isInitialized) canvas.onPause()
         body.removeAllViews()
         val search =
@@ -324,6 +425,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showEditor() {
         libraryVisible = false
+        updateNavigation()
         if (::canvas.isInitialized) canvas.onPause()
         body.removeAllViews()
         val p = library.current
@@ -358,20 +460,20 @@ class MainActivity : AppCompatActivity() {
         canvas.load(library)
         val actions = row()
         actions.addView(
-            button("자르기") {
+            iconButton("자르기") {
                 choices("사진 비율", listOf("original", "1:1", "4:5", "3:2", "16:9")) {
                     edit { a -> a.put("crop", it) }
                 }
             }
         )
         actions.addView(
-            button("회전") { edit { it.put("rotation", (it.optInt("rotation") + 90) % 360) } }
+            iconButton("회전") { edit { it.put("rotation", (it.optInt("rotation") + 90) % 360) } }
         )
-        actions.addView(button("반전") { edit { it.put("flip", !it.optBoolean("flip")) } })
-        actions.addView(button("↶") { undo(false) })
-        actions.addView(button("↷") { undo(true) })
+        actions.addView(iconButton("반전") { edit { it.put("flip", !it.optBoolean("flip")) } })
+        actions.addView(iconButton("↶") { undo(false) })
+        actions.addView(iconButton("↷") { undo(true) })
         actions.addView(
-            button("원본") {
+            iconButton("원본") {
                 comparing = !comparing
                 canvas.changed(comparing, true)
             }
@@ -391,15 +493,22 @@ class MainActivity : AppCompatActivity() {
         tools.addView(histogram, LinearLayout.LayoutParams(-1, dp(36)))
         canvas.onHistogram = { histogram.bins = it }
         val tabs = row()
+        panelTabs = tabs
         listOf("편집", "색상·톤", "마스크", "정보").forEach { panel ->
             tabs.addView(
                 button(panel) {
                     selectedPanel = panel
+                    updateTabs()
+                    updateNavigation()
                     showControls()
-                }
+                },
+                LinearLayout.LayoutParams(0, dp(44), 1f),
             )
         }
+        tools.setBackgroundColor(Color.rgb(30, 32, 33))
         tools.addView(tabs)
+        tools.addView(divider())
+        updateTabs()
         val scroll = ScrollView(this)
         controls = LinearLayout(this).also { it.orientation = LinearLayout.VERTICAL }
         scroll.addView(controls)
@@ -438,11 +547,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun slider(title: String, key: String, min: Double = -100.0, max: Double = 100.0) {
         val p = library.current ?: return
-        val label = text("$title · ${"%.2f".format(p.settings.optDouble(key))}")
-        controls.addView(label)
+        val label =
+            text("%.2f".format(p.settings.optDouble(key))).also {
+                it.setTextColor(accent)
+                it.gravity = Gravity.END
+            }
+        val labels = row()
+        labels.addView(text(title), LinearLayout.LayoutParams(0, -2, 1f))
+        labels.addView(label)
+        controls.addView(labels)
         val bar = SeekBar(this)
-        bar.progressTintList = ColorStateList.valueOf(accent)
-        bar.thumbTintList = ColorStateList.valueOf(accent)
+        styleSlider(bar)
         bar.max = 1000
         bar.progress =
             (((p.settings.optDouble(key) - min) / (max - min)) * 1000)
@@ -458,7 +573,7 @@ class MainActivity : AppCompatActivity() {
                 override fun onProgressChanged(s: SeekBar?, progress: Int, fromUser: Boolean) {
                     if (!fromUser) return
                     val value = min + (max - min) * progress / 1000
-                    label.text = "$title · ${"%.2f".format(value)}"
+                    label.text = "%.2f".format(value)
                     p.settings.put(key, value)
                     canvas.changed(comparing, true)
                 }

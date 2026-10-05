@@ -1,6 +1,7 @@
 import CoreImage
 import PhotosUI
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 import Vision
 
@@ -59,6 +60,7 @@ struct NativeStudioView: View {
       }.background(Color(red: 0.075, green: 0.085, blue: 0.09)).tint(accent).preferredColorScheme(
         .dark)
     }
+    .buttonStyle(StudioOutlineButtonStyle())
     .sheet(isPresented: $about) {
       VStack(spacing: 20) {
         Image("StudioLogo").resizable().frame(width: 80, height: 80)
@@ -154,7 +156,7 @@ struct NativeStudioView: View {
       Button {
         saveProject()
       } label: {
-        Image(systemName: "square.and.arrow.down")
+        Image(systemName: "externaldrive")
       }.accessibilityLabel("프로젝트 저장")
       Button {
         if let p = library.current {
@@ -162,9 +164,11 @@ struct NativeStudioView: View {
           exporting = true
         }
       } label: {
-        Image(systemName: "square.and.arrow.up")
+        Image(systemName: "arrow.down.to.line")
       }.accessibilityLabel("내보내기").disabled(library.current == nil)
-    }.buttonStyle(.borderless).font(.system(size: 20)).padding(.horizontal, 14).frame(height: 52)
+    }.buttonStyle(StudioIconButtonStyle()).foregroundStyle(Color(white: 0.72)).font(
+      .system(size: 20)
+    ).padding(.horizontal, 12).frame(height: 60)
       .background(Color.white.opacity(0.035))
   }
   private func preview(_ photo: NativePhoto) -> some View {
@@ -230,36 +234,36 @@ struct NativeStudioView: View {
         } label: {
           Image(systemName: compare ? "eye.fill" : "eye")
         }.accessibilityLabel("원본 비교")
-      }.font(.system(size: 17)).padding(10)
+      }.buttonStyle(StudioIconButtonStyle()).foregroundStyle(Color(white: 0.58)).font(
+        .system(size: 17)
+      ).padding(.horizontal, 8).frame(height: 46).overlay(alignment: .bottom) { Divider() }
     }
   }
   private var bottomNavigation: some View {
-    HStack {
-      Button {
-        picker = "source"
-      } label: {
-        Label("사진 추가", systemImage: "plus")
-      }
-      Button {
-        section = "사진"
-      } label: {
-        Label("사진", systemImage: "photo.on.rectangle")
-      }
-      Button {
+    HStack(spacing: 0) {
+      navigationItem("사진 추가", "plus", active: false) { picker = "source" }
+      navigationItem("사진", "photo.on.rectangle", active: section == "사진") { section = "사진" }
+      navigationItem("편집", "slider.horizontal.3", active: section == "편집" && panel != "프리셋") {
         section = "편집"
         panel = "편집"
-      } label: {
-        Label("편집", systemImage: "slider.horizontal.3")
       }
-      Button {
+      navigationItem("프리셋", "paintpalette", active: section == "편집" && panel == "프리셋") {
         section = "편집"
         panel = "프리셋"
-      } label: {
-        Label("프리셋", systemImage: "paintpalette")
       }
-    }.labelStyle(NativeTabLabels()).font(.system(size: 22)).buttonStyle(.borderless).frame(
-      maxWidth: .infinity
-    ).padding(.vertical, 14).background(Color.white.opacity(0.04))
+    }.background(Color(white: 0.11)).overlay(alignment: .top) { Divider() }
+  }
+  private func navigationItem(
+    _ title: String, _ icon: String, active: Bool, action: @escaping () -> Void
+  ) -> some View {
+    Button(action: action) {
+      VStack(spacing: 6) {
+        Image(systemName: icon).font(.system(size: 22))
+        Text(title).font(.system(size: 11))
+      }.frame(maxWidth: .infinity).frame(height: 62)
+        .foregroundStyle(active ? accent : Color(white: 0.53))
+        .background(active ? accent.opacity(0.055) : .clear)
+    }.buttonStyle(.plain)
   }
   private var libraryGrid: some View {
     VStack {
@@ -303,9 +307,35 @@ struct NativeStudioView: View {
   private var controls: some View {
     VStack(spacing: 0) {
       NativeHistogramView(bins: histogram).frame(height: 36).padding(.horizontal, 14)
-      Picker("편집 도구", selection: $panel) {
-        ForEach(["편집", "색상·톤", "마스크", "정보", "프리셋"], id: \.self) { Text($0) }
-      }.pickerStyle(.segmented).padding(8)
+      if panel == "프리셋" {
+        Text("크리에이티브 프리셋").font(.caption).frame(maxWidth: .infinity, alignment: .leading).padding(
+          14)
+      } else {
+        HStack(spacing: 0) {
+          ForEach(
+            Array(
+              zip(
+                ["편집", "색상·톤", "마스크", "정보"],
+                ["slider.horizontal.3", "paintpalette", "circle.inset.filled", "camera"])), id: \.0
+          ) { title, icon in
+            Button {
+              panel = title
+            } label: {
+              HStack(spacing: 5) {
+                Image(systemName: icon)
+                Text(title)
+              }
+              .font(.system(size: 11)).frame(maxWidth: .infinity).frame(height: 44)
+              .foregroundStyle(panel == title ? accent : Color(white: 0.53))
+              .overlay(alignment: .bottom) {
+                if panel == title {
+                  Rectangle().fill(accent).frame(height: 2).padding(.horizontal, 12)
+                }
+              }
+            }.buttonStyle(.plain)
+          }
+        }.overlay(alignment: .bottom) { Divider() }
+      }
       ScrollView {
         VStack(alignment: .leading, spacing: 14) {
           if panel == "편집" {
@@ -365,7 +395,7 @@ struct NativeStudioView: View {
           String(format: key == "exposure" ? "%.2f" : "%.0f", library.current?.settings[key] ?? 0)
         ).font(.caption.monospacedDigit()).foregroundStyle(accent)
       }
-      Slider(
+      StudioSlider(
         value: Binding(
           get: { library.current?.settings[key] ?? 0 }, set: { library.update(key, $0) }),
         in: range,
@@ -374,7 +404,7 @@ struct NativeStudioView: View {
             library.update(key, p.settings[key], commit: true)
           }
         }
-      ).accessibilityLabel(title)
+      ).frame(height: 28).accessibilityLabel(title)
     }
   }
   private var colorSettings: some View {
@@ -552,7 +582,7 @@ struct NativeStudioView: View {
         Spacer()
         Text(String(format: "%.2f", value(mask))).font(.caption)
       }
-      Slider(
+      StudioSlider(
         value: Binding(
           get: { value(library.current?.settings.masks.first { $0.id == maskID }) },
           set: { v in
@@ -925,5 +955,75 @@ struct NativeHistogramView: View {
         context.fill(path, with: .color(color.opacity(0.35)))
       }
     }
+  }
+}
+
+private struct StudioIconButtonStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label.frame(minWidth: 34, minHeight: 42)
+      .background(configuration.isPressed ? Color.white.opacity(0.06) : .clear)
+      .clipShape(RoundedRectangle(cornerRadius: 5))
+  }
+}
+private struct StudioOutlineButtonStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label.font(.system(size: 13)).padding(.horizontal, 12).padding(.vertical, 10)
+      .frame(minHeight: 40).background(Color.white.opacity(configuration.isPressed ? 0.07 : 0.015))
+      .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.white.opacity(0.15), lineWidth: 1))
+      .clipShape(RoundedRectangle(cornerRadius: 5))
+  }
+}
+private struct StudioSlider: UIViewRepresentable {
+  @Binding var value: Double
+  let range: ClosedRange<Double>
+  let onEditingChanged: (Bool) -> Void
+  init(
+    value: Binding<Double>, in range: ClosedRange<Double>,
+    onEditingChanged: @escaping (Bool) -> Void
+  ) {
+    self._value = value
+    self.range = range
+    self.onEditingChanged = onEditingChanged
+  }
+  func makeCoordinator() -> Coordinator { Coordinator(self) }
+  func makeUIView(context: Context) -> UISlider {
+    let slider = StudioThinSlider()
+    slider.minimumTrackTintColor = UIColor(white: 0.52, alpha: 1)
+    slider.maximumTrackTintColor = UIColor(white: 0.27, alpha: 1)
+    let thumb = UIGraphicsImageRenderer(size: CGSize(width: 16, height: 16)).image { ctx in
+      UIColor(white: 0.7, alpha: 1).setStroke()
+      ctx.cgContext.setLineWidth(2)
+      ctx.cgContext.strokeEllipse(in: CGRect(x: 2, y: 2, width: 12, height: 12))
+      UIColor(white: 0.13, alpha: 1).setFill()
+      ctx.cgContext.fillEllipse(in: CGRect(x: 4, y: 4, width: 8, height: 8))
+    }
+    slider.setThumbImage(thumb, for: .normal)
+    slider.addTarget(
+      context.coordinator, action: #selector(Coordinator.changed(_:)), for: .valueChanged)
+    slider.addTarget(context.coordinator, action: #selector(Coordinator.begin), for: .touchDown)
+    slider.addTarget(
+      context.coordinator, action: #selector(Coordinator.end),
+      for: [.touchUpInside, .touchUpOutside, .touchCancel])
+    return slider
+  }
+  func updateUIView(_ slider: UISlider, context: Context) {
+    context.coordinator.parent = self
+    slider.minimumValue = Float(range.lowerBound)
+    slider.maximumValue = Float(range.upperBound)
+    if !slider.isTracking { slider.value = Float(value) }
+  }
+  final class Coordinator: NSObject {
+    var parent: StudioSlider
+    init(_ parent: StudioSlider) { self.parent = parent }
+    @objc func changed(_ slider: UISlider) { parent.value = Double(slider.value) }
+    @objc func begin() { parent.onEditingChanged(true) }
+    @objc func end() { parent.onEditingChanged(false) }
+  }
+}
+
+private final class StudioThinSlider: UISlider {
+  override func trackRect(forBounds bounds: CGRect) -> CGRect {
+    let rect = super.trackRect(forBounds: bounds)
+    return CGRect(x: rect.minX, y: rect.midY - 1, width: rect.width, height: 2)
   }
 }
