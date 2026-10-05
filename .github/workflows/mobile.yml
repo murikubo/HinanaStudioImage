@@ -1,4 +1,4 @@
-name: Mobile apps
+name: Native mobile apps
 on:
   workflow_dispatch:
   push:
@@ -7,59 +7,58 @@ on:
       - 'public/**'
       - 'android/**'
       - 'ios/**'
+      - 'scripts/*mobile*'
+      - 'scripts/*native*'
+      - 'scripts/sync-version.cjs'
+      - 'tests/native/**'
       - 'package*.json'
-      - 'capacitor.config.ts'
-      - 'index.html'
-      - 'tests/mobile-smoke.mjs'
       - '.github/workflows/mobile.yml'
 permissions:
   contents: read
 jobs:
   android:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
       - uses: android-actions/setup-android@v3
       - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
-      - run: npm ci
-      - run: npm test
-      - run: npm run build:mobile && npx cap sync android
-      - run: npx playwright install --with-deps chromium webkit
-      - name: Test touch layouts and editing
-        run: |
-          npm run dev:web > /tmp/hinana-vite.log 2>&1 &
-          npx wait-on http://127.0.0.1:5173
-          node tests/mobile-smoke.mjs
-      - run: ./android/gradlew -p android assembleDebug
-      - uses: actions/upload-artifact@v4
+      - uses: reactivecircus/android-emulator-runner@v2
         with:
-          name: Hinana-Studio-Image-Android-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          api-level: 36
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: ./android/gradlew -p android connectedDebugAndroidTest assembleDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Hinana-Studio-Image-Android-native
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/reports/androidTests/connected/
           retention-days: 14
   ios:
     runs-on: macos-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: npm
-      - run: npm ci
-      - run: npm run build:mobile && npx cap sync ios
-      - name: Build unsigned iOS simulator app
-        run: xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath release/ios CODE_SIGNING_ALLOWED=NO build
+      - name: Ensure Core Image Metal compiler is available
+        run: |
+          if ! xcrun metal --version; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+      - run: node scripts/build-mobile.cjs --ios
+      - run: node scripts/test-native-ios.cjs
       - uses: actions/upload-artifact@v4
         with:
-          name: Hinana-Studio-Image-iOS-simulator
-          path: release/ios/Build/Products/Debug-iphonesimulator/App.app
+          name: Hinana-Studio-Image-iOS-native-simulator
+          path: release/ios-native-simulator/Build/Products/Debug-iphonesimulator/App.app
           retention-days: 14

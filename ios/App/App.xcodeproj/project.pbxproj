@@ -7,26 +7,38 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA1300000000000000000013 = {isa = PBXBuildFile; fileRef = AA1200000000000000000013; };
+		AA1300000000000000000012 = {isa = PBXBuildFile; fileRef = AA1200000000000000000012; };
+		AA1300000000000000000011 = {isa = PBXBuildFile; fileRef = AA1200000000000000000011; };
+		AA1300000000000000000010 = {isa = PBXBuildFile; fileRef = AA1200000000000000000010; };
+		AA130000000000000000000F = {isa = PBXBuildFile; fileRef = AA120000000000000000000F; };
+		AA130000000000000000000E /* NativeStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA120000000000000000000E; };
+		AA130000000000000000000D /* NativeCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA120000000000000000000D; };
+		AA130000000000000000000C /* NativeRenderEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA120000000000000000000C; };
+		AA130000000000000000000B /* NativeLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA120000000000000000000B; };
+		AA130000000000000000000A /* NativeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA120000000000000000000A; };
 		AA1300000000000000000004 /* NativeSubjectSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1200000000000000000004 /* NativeSubjectSelector.swift */; };
-		AA1300000000000000000003 /* HinanaBridgeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1200000000000000000003 /* HinanaBridgeViewController.swift */; };
-		AA1300000000000000000002 /* HinanaImagesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1200000000000000000002 /* HinanaImagesPlugin.swift */; };
 		AA1300000000000000000001 /* NativeImageDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1200000000000000000001 /* NativeImageDecoder.swift */; };
 		AA1100000000000000000002 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AA1100000000000000000001 /* PrivacyInfo.xcprivacy */; };
-		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
-		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
-		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
+		4D22ABE92AF431CB00220026 /* libwebp in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* libwebp */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
-		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
-		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		AA1200000000000000000013 = {isa = PBXFileReference; lastKnownFileType = text; path = NativeEditor/NativeThirdPartyNotices.txt; sourceTree = "<group>"; };
+		AA1200000000000000000012 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeEditor/NativePNGWriter.swift; sourceTree = "<group>"; };
+		AA1200000000000000000011 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../../../tests/native/editor-reference.json"; sourceTree = "<group>"; };
+		AA1200000000000000000010 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeEditor/NativeDiagnostics.swift"; sourceTree = "<group>"; };
+		AA120000000000000000000F = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeEditor/NativeMigration.swift; sourceTree = "<group>"; };
+		AA120000000000000000000E /* NativeStudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeEditor/NativeStudioView.swift; sourceTree = "<group>"; };
+		AA120000000000000000000D /* NativeCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeEditor/NativeCanvas.swift; sourceTree = "<group>"; };
+		AA120000000000000000000C /* NativeRenderEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeEditor/NativeRenderEngine.swift; sourceTree = "<group>"; };
+		AA120000000000000000000B /* NativeLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeEditor/NativeLibrary.swift; sourceTree = "<group>"; };
+		AA120000000000000000000A /* NativeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeEditor/NativeModels.swift; sourceTree = "<group>"; };
 		AA1200000000000000000004 /* NativeSubjectSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSubjectSelector.swift; sourceTree = "<group>"; };
-		AA1200000000000000000003 /* HinanaBridgeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HinanaBridgeViewController.swift; sourceTree = "<group>"; };
-		AA1200000000000000000002 /* HinanaImagesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HinanaImagesPlugin.swift; sourceTree = "<group>"; };
 		AA1200000000000000000001 /* NativeImageDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeImageDecoder.swift; sourceTree = "<group>"; };
 		AA1100000000000000000001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
@@ -47,7 +59,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+				4D22ABE92AF431CB00220026 /* libwebp in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -75,9 +87,17 @@
 			isa = PBXGroup;
 			children = (
 				AA1200000000000000000001 /* NativeImageDecoder.swift */,
-				AA1200000000000000000002 /* HinanaImagesPlugin.swift */,
-				AA1200000000000000000003 /* HinanaBridgeViewController.swift */,
 				AA1200000000000000000004 /* NativeSubjectSelector.swift */,
+				AA120000000000000000000A /* NativeModels.swift */,
+				AA120000000000000000000B /* NativeLibrary.swift */,
+				AA120000000000000000000C /* NativeRenderEngine.swift */,
+				AA120000000000000000000D /* NativeCanvas.swift */,
+				AA120000000000000000000E /* NativeStudioView.swift */,
+				AA120000000000000000000F,
+				AA1200000000000000000010,
+				AA1200000000000000000012,
+				AA1200000000000000000013,
+				AA1200000000000000000011,
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
@@ -99,6 +119,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 504EC3161FED79650016851F /* Build configuration list for PBXNativeTarget "App" */;
 			buildPhases = (
+				AA1500000000000000000001 /* Compile Native Image Kernels */,
 				504EC3001FED79650016851F /* Sources */,
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
@@ -109,7 +130,7 @@
 			);
 			name = App;
 			packageProductDependencies = (
-				4D22ABE82AF431CB00220026 /* CapApp-SPM */,
+				4D22ABE82AF431CB00220026 /* libwebp */,
 			);
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
@@ -141,7 +162,7 @@
 			);
 			mainGroup = 504EC2FB1FED79650016851F;
 			packageReferences = (
-				D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */,
+				D4C12C0A2AAA248700AAC8A2 /* XCRemoteSwiftPackageReference "libwebp" */,
 			);
 			productRefGroup = 504EC3051FED79650016851F /* Products */;
 			projectDirPath = "";
@@ -157,17 +178,28 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA1300000000000000000011,
+				AA1300000000000000000013,
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
-				50B271D11FEDC1A000F3C39B /* public in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,
 				AA1100000000000000000002 /* PrivacyInfo.xcprivacy in Resources */,
-				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
-				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
-				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+        AA1500000000000000000001 /* Compile Native Image Kernels */ = {
+            isa = PBXShellScriptBuildPhase;
+            buildActionMask = 2147483647;
+            files = ();
+            inputPaths = ("$(SRCROOT)/App/NativeEditor/NativeKernels.metal");
+            outputPaths = ("$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/default.metallib");
+            runOnlyForDeploymentPostprocessing = 0;
+            shellPath = /bin/sh;
+            shellScript = "set -e\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nTARGET_PLATFORM=\"air64-apple-ios15.0\"\nif [ \"$PLATFORM_NAME\" = \"iphonesimulator\" ]; then TARGET_PLATFORM=\"$TARGET_PLATFORM-simulator\"; fi\nxcrun metal -target \"$TARGET_PLATFORM\" -isysroot \"$SDKROOT\" -fcikernel -c \"$SRCROOT/App/NativeEditor/NativeKernels.metal\" -o \"$TARGET_TEMP_DIR/HinanaNative.air\"\nxcrun metallib -cikernel \"$TARGET_TEMP_DIR/HinanaNative.air\" -o \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/default.metallib\"\n";
+        };
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		504EC3001FED79650016851F /* Sources */ = {
@@ -176,9 +208,15 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				AA1300000000000000000001 /* NativeImageDecoder.swift in Sources */,
-				AA1300000000000000000002 /* HinanaImagesPlugin.swift in Sources */,
-				AA1300000000000000000003 /* HinanaBridgeViewController.swift in Sources */,
 				AA1300000000000000000004 /* NativeSubjectSelector.swift in Sources */,
+				AA130000000000000000000A /* NativeModels.swift in Sources */,
+				AA130000000000000000000B /* NativeLibrary.swift in Sources */,
+				AA130000000000000000000C /* NativeRenderEngine.swift in Sources */,
+				AA130000000000000000000D /* NativeCanvas.swift in Sources */,
+				AA130000000000000000000E /* NativeStudioView.swift in Sources */,
+				AA130000000000000000000F,
+				AA1300000000000000000010,
+				AA1300000000000000000012,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -320,14 +358,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.12.7;
+				MARKETING_VERSION = 0.13.0;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = studio.hinana.image;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -342,14 +380,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.12.7;
+				MARKETING_VERSION = 0.13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = studio.hinana.image;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
@@ -381,18 +419,19 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = "CapApp-SPM";
+/* Begin XCRemoteSwiftPackageReference section */
+		D4C12C0A2AAA248700AAC8A2 /* XCRemoteSwiftPackageReference "libwebp" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SDWebImage/libwebp-Xcode.git";
+            requirement = {kind = exactVersion; version = 1.6.0; };
 		};
-/* End XCLocalSwiftPackageReference section */
+/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		4D22ABE82AF431CB00220026 /* CapApp-SPM */ = {
+		4D22ABE82AF431CB00220026 /* libwebp */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */;
-			productName = "CapApp-SPM";
+			package = D4C12C0A2AAA248700AAC8A2 /* XCRemoteSwiftPackageReference "libwebp" */;
+			productName = "libwebp";
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

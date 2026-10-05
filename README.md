@@ -226,43 +226,34 @@ Unsplash의 다음 사진을 로컬 샘플로 포함했습니다.
 https://images.unsplash.com/photo-1464822759023-fed622ff2c3b
 샘플은 앱 기능을 둘러보기 위한 자료이며 사용자 사진은 별도로 불러옵니다.
 
-## iPhone · Android 앱
+## iPhone · iPad · Android 네이티브 앱 (0.13.0)
 
-Capacitor 8 기반 모바일 앱 프로젝트는 `ios/`와 `android/`에 있습니다. 사진·편집·프리셋 하단 도구와 세로/가로 화면, 노치 여백을 지원합니다. JPEG/PNG/WebP 사진, 기본 보정·색상·피부 보정·브러시/선형/원형 마스크·EXIF 표시·프로젝트 저장/열기를 재사용합니다. 내보내기와 `.hinanaimage` 저장은 OS 공유 창에서 저장 위치나 대상 앱을 선택합니다. 공유 창을 취소하면 파일이 외부에 저장되지 않습니다. 앱 내 작업은 IndexedDB에 자동 저장되므로 중요한 작업은 프로젝트로도 내보내세요.
+모바일 앱은 웹 편집 화면과 Capacitor 런타임에서 완전히 전환했습니다. iPhone·iPad는 SwiftUI/UIKit + Core Image/Metal, Android는 Kotlin + 네이티브 View/OpenGL ES 3를 사용합니다. 데스크톱 Electron 앱은 유지됩니다. 웹 화면은 예전 버전의 IndexedDB 작업 공간을 한 번 읽어 이관할 때만 사용하며, 이관 뒤 편집에는 참여하지 않습니다. 기존 저장소는 삭제하지 않습니다.
 
-iPhone은 Core Image로 HEIC·RAW·ProRAW 원본을 최대 32MP까지 현상합니다. iOS 17 이상에서는 HDR 게인맵을 확장해 16비트 PQ 작업 이미지로 유지하고, HDR 사진을 HDR 편집 모드로 자동 불러옵니다. Apple Vision 피사체 선택과 기존 브러시 추가·지우기도 연결했습니다. 파일 앱과 사진 보관함 중 원본을 가져올 곳을 선택할 수 있습니다. 카메라·GPS EXIF는 작업 이미지에 유지합니다. 큰 16비트/PQ PNG를 WebView가 읽지 못하는 경우를 피하도록 동일 해상도의 JPEG 표시 이미지를 함께 저장합니다. 고정밀 보정과 출력은 원본 작업 PNG를 사용합니다.
+기본·피부 보정, HSL 8개 색상, 톤 곡선, 프리셋, 자르기·회전·반전, 원본 비교, 핀치 줌·이동·맞춤·작은 사진 중앙 정렬, 사진 검색·별표·길게 눌러 삭제, EXIF 표시, 실행 취소·다시 실행, 프로젝트 저장/열기를 제공합니다. 브러시·선형·원형 마스크 및 피사체 마스크 브러시 수정도 네이티브로 처리합니다. iOS 17 이상은 Apple Vision으로 피사체를 선택합니다. Android의 새 AI 피사체 선택과 RAW 현상은 미지원이며, 프로젝트에 포함된 피사체 영역·브러시 수정·RAW 원본은 보존합니다.
 
-HDR 편집의 WebView 미리보기 지원은 기기에 따라 다릅니다. iOS 17 이상에서는 ‘HDR 화면 보기 · iPhone’ 버튼으로 보정 결과를 Apple 네이티브 HDR 화면에서 확대해 볼 수 있습니다. SDR 사진을 HDR 모드로 바꾸는 것만으로 밝기가 늘어나지는 않으며, HDR 하이라이트 확장으로 조절합니다. 실제 화면 밝기는 디스플레이·OS 설정에 따라 달라집니다. Android의 RAW·HEIC 해독과 AI 피사체 선택은 아직 연결되지 않았습니다.
+작업 파일과 보정 기록은 앱 전용 파일 저장소에 자동 저장합니다. `.hinanaimage` 프로젝트 버전 1–5를 읽고 버전 5로 저장하여 데스크톱과 호환됩니다. 프로젝트를 열면 최종 보정값을 복원하고 실행 취소 기록은 새로 시작합니다. 공유 창에서 프로젝트나 이미지를 외부에 저장할 수 있습니다. 공유를 취소하면 외부 저장은 완료되지 않습니다. 중요한 작업은 프로젝트로도 저장하세요.
+
+iOS는 ImageIO/Core Image로 HEIC·RAW·ProRAW를 읽으며 HDR 게인맵/PQ 원본을 자동 HDR 모드로 불러옵니다. Metal 화면은 확장 동적 범위(EDR)를 사용합니다. Android는 OS가 지원하는 HEIC와 Android 14 이상 게인맵을 읽으며, 현재 편집 화면은 SDR로 변환한 미리보기입니다. 양쪽 모두 sRGB/Display P3, 부동소수점 편집, JPEG·WebP·8/16비트 PNG·16비트 Rec.2020/PQ HDR PNG 출력을 제공합니다. HDR 출력과 기기 화면의 HDR 밝기는 별개이며 실제 밝기는 패널·OS·전력 상태에 따라 달라집니다. SDR 사진은 HDR 모드를 켜는 것만으로 밝아지지 않으며 ‘HDR 하이라이트 확장’으로 조절합니다.
+
+미리보기는 GPU에서 화면에 필요한 영역을 처리합니다. Android는 손가락을 뗀 뒤 확대 영역을 다시 해독하며 캐시를 제한합니다. PNG 출력은 줄 단위로 처리해 원본 전체의 CPU 부동소수점 버퍼를 만들지 않습니다. 네이티브 앱에도 OS/GPU 메모리 제한은 있습니다. 원본은 256MB·100MP 이하, 프로젝트는 512MB·200장 이하이며 JPEG/WebP 출력은 32MP 이하입니다. Android 출력 폭은 기기 GPU의 최대 텍스처 크기 이하여야 합니다. 큰 프로젝트의 JSON 가져오기에는 일시적인 메모리 사용이 있으므로 실제 수용량은 기기에 따라 달라집니다.
 
 ```sh
 npm ci
-npm run mobile:sync
-npm run mobile:android   # Android Studio에서 열기
-npm run mobile:ios       # Xcode에서 열기
+npm run mobile:sync             # 버전 동기화만 수행, 웹 번들/Capacitor sync 불필요
+npm run mobile:android          # Android Studio 프로젝트 열기
+npm run mobile:ios              # Xcode 프로젝트 열기
+npm run build:mobile -- --android
+npm run build:mobile -- --ios
+npm run test:native:reference   # 데스크톱 엔진의 GPU 비교 기준 재생성
+npm run test:native:android     # 연결된 테스트 에뮬레이터에서 실행
+npm run test:native:ios         # 격리된 새 시뮬레이터에서 검증 후 삭제
 ```
 
-Android는 JDK 21과 Android SDK 36이 필요합니다. `android/local.properties`에 로컬 SDK 경로를 설정하고 `./android/gradlew -p android assembleDebug`로 테스트 APK를 만듭니다. 출력은 `android/app/build/outputs/apk/debug/app-debug.apk`이며 테스트용 debug 서명입니다. 기기에서 설치한 뒤 파일 선택·공유·화면 회전과 백그라운드 복원을 확인하세요.
+Android는 JDK 21, Android SDK 36과 OpenGL ES 3 기기가 필요합니다. `ANDROID_HOME` 또는 `android/local.properties`에 SDK 경로를 설정합니다. APK는 `android/app/build/outputs/apk/debug/app-debug.apk`에 생성되며 테스트용 debug 서명입니다. iOS는 macOS·Xcode·iOS 시뮬레이터 런타임과 Metal 컴파일러가 필요합니다. Xcode가 Metal 도구 설치를 요구하면 `xcodebuild -downloadComponent MetalToolchain`을 실행합니다. 실제 iPhone은 Xcode의 Apple ID·개발 Team으로 서명하고 개발자 모드를 켜야 합니다. 배포용 서명 및 스토어 등록은 별도입니다.
 
-iOS는 Capacitor 8의 Xcode 환경과 Apple 서명 팀을 설정해야 실제 iPhone에 설치할 수 있습니다. Filesystem 플러그인의 파일 타임스탬프 API 사용 사유를 `PrivacyInfo.xcprivacy`에 포함했습니다. App Store/Play Store 등록과 배포용 서명은 별도입니다.
+GitHub Actions의 `Native mobile apps` 워크플로는 Android 에뮬레이터 테스트와 iOS 네이티브 진단을 실행하고 APK·시뮬레이터 앱을 빌드합니다. 테스트는 데스크톱 보정 엔진과 GPU 결과 비교, 피부 보정, 프로젝트·실행 취소 기록, 16비트/PQ 출력과 EXIF, 기존 작업 공간 이관을 확인합니다. 실제 사진 선택·공유·물리적인 HDR 밝기는 실기기 확인이 필요합니다. 테스트의 기존 저장소 fixture는 테스트 에뮬레이터/격리 시뮬레이터에서만 실행하세요.
 
-GitHub Actions의 `Mobile apps` 워크플로가 Android APK, 서명 없는 iOS 시뮬레이터 앱을 빌드합니다. 모바일 화면 편집 테스트는 개발 서버 실행 후 `node tests/mobile-smoke.mjs`로 수행합니다. 브라우저 테스트가 실제 OS의 파일 선택기·공유 창 검증을 대신하지는 않습니다.
+iOS WebP 인코딩은 BSD 라이선스의 libwebp 1.6.0을 사용하며 Swift Package Manager로 고정된 버전을 받습니다. 라이선스는 앱 번들의 `NativeThirdPartyNotices.txt`와 저장소에 포함됩니다. 사용자 사진은 외부 서버로 전송하지 않습니다.
 
-공식 문서: [개발 환경](https://capacitorjs.com/docs/getting-started/environment-setup), [공유](https://capacitorjs.com/docs/apis/share), [파일 저장](https://capacitorjs.com/docs/apis/filesystem).
-
-모든 선택 메뉴는 앱의 어두운 테마에 맞춘 목록으로 표시하며 터치와 키보드 조작을 지원합니다. HDR 화면 미리보기는 WebGPU의 rgba16float / extended 설정(또는 Canvas 2D의 실제 float16 픽셀 보존과 extended 설정)과 화면의 HDR 신호를 함께 확인합니다. 지원되지 않는 WebView에서는 SDR 미리보기라는 안내를 표시합니다. HDR 파일을 출력할 수 있는 것과 기기 화면에서 HDR 밝기를 표시할 수 있는 것은 별개입니다.
-
-버전 갱신은 `npm version patch --no-git-tag-version`으로 수행합니다. `version` 훅이 Android/iOS 버전과 빌드 번호를 함께 갱신합니다. 기능 릴리스에는 `minor`를 사용할 수 있습니다.
-
-macOS에서 iPhone 이미지 처리 검증: `xcrun swiftc ios/App/App/NativeImageDecoder.swift ios/App/App/NativeSubjectSelector.swift tests/native/NativeImagesCheck.swift -o /tmp/hinana-native-check` 후 `/tmp/hinana-native-check /tmp/hinana-fixtures HinanaStudioIcon.png`. 생성한 PQ·게인맵 HEIC의 HDR 밝기, EXIF/방향, Vision 선택·제외를 확인합니다.
-
-이어서 개발 서버를 실행하고 `node --experimental-strip-types tests/native-ios-smoke.mjs /tmp/hinana-fixtures`로 iOS 브리지 흐름을 검증합니다. 원본 HEIC 전달, HDR 자동 모드, 16비트 프로젝트 보존, 편집값을 적용한 네이티브 HDR 미리보기, 피사체 래스터 저장과 RAW 원본 재현상 전달을 확인합니다. 브리지 응답은 모의 플러그인이므로 실기기 사진 선택·카메라 RAW 지원·화면 밝기는 별도 확인해야 합니다.
-
-확대 미리보기는 배율에 필요한 크기로 렌더링하며 모바일은 최대 약 4MP로 제한합니다. 큰 사진의 확대 화면은 축소 렌더링될 수 있습니다. 배율과 미리보기 제한은 원본 및 원본 해상도 내보내기에 적용되지 않습니다. 사진 이동은 미리보기 영역의 스크롤로 처리합니다.
-
-핀치 후 미리보기는 화면의 픽셀 밀도를 반영하고, 맞춤 화면의 긴 변 1600px보다 낮게 줄이지 않습니다(작은 원본은 원본 크기까지). 작은 배율로 전환할 때 갑자기 화질이 떨어지는 것을 방지하면서 모바일의 약 4MP 제한을 유지합니다. `node tests/zoom-quality-smoke.mjs`로 24MP 세로 사진을 3배 픽셀 밀도에서 반복 확대·축소하며 픽셀 수, 표시 크기, 종횡비와 빈 화면 여부를 검사합니다. Chromium은 실제 터치 이벤트, WebKit은 포인터 캡처를 모의 처리한 자동화 이벤트를 사용하므로 실제 iPhone GPU 표시 검증은 별도로 필요합니다.
-
-사진 위에서 두 손가락을 벌리거나 모으면 맞춤 배율부터 최대 400%까지 확대·축소합니다. 확대 상태에서는 한 손가락으로 사진을 이동합니다. 마스크 편집에서도 두 손가락은 확대·축소로 처리하며, 한 손가락은 마스크 도구에 사용합니다. 핀치 중에는 기존 픽셀을 확대하고 손가락을 뗀 뒤 한 번 렌더링합니다. 개발 서버 실행 후 `node tests/gestures-smoke.mjs`로 터치 확대·축소, 이동, 마스크 획 방지를 검증합니다.
-
-배율을 지정해도 사진이 미리보기 영역보다 작은 방향은 중앙에 정렬합니다. 영역보다 큰 방향은 스크롤할 수 있으며 사진의 양쪽 끝에 접근할 수 있습니다.
-
-라이브러리와 하단 필름스트립의 사진을 길게 누르거나 우클릭하면 삭제 확인창을 엽니다. 키보드에서는 사진에 초점을 두고 Shift+F10을 누릅니다. 삭제는 앱 작업 공간의 사진과 보정 내역에만 적용하며 원본 파일과 사진 보관함은 유지합니다. 이미 저장한 프로젝트 파일에는 반영되지 않으므로 필요하면 프로젝트를 다시 저장합니다. `node tests/library-smoke.mjs`로 스크롤 시 길게 누르기 취소, 삭제 취소·확정, 재시작 후 유지, 마지막 사진 삭제와 모바일 프로그램명 표시를 검증합니다.
+버전 갱신은 `npm version patch --no-git-tag-version`(기능 릴리스는 `minor`)으로 수행합니다. 훅이 Android/iOS 버전 및 빌드 번호를 동기화합니다.

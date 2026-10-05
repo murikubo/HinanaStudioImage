@@ -1,6 +1,6 @@
 {
   "name": "hinana-studio-image",
-  "version": "0.12.7",
+  "version": "0.13.0",
   "private": true,
   "license": "UNLICENSED",
   "author": "비나래",
@@ -127,11 +127,14 @@
     "pack:mac": "npm run build && electron-builder --mac --dir --publish never",
     "build:native": "node scripts/build-native.cjs",
     "pack:win": "npm run build && electron-builder --win --x64 --dir --publish never",
-    "build:mobile": "tsc && vite build",
-    "mobile:sync": "npm run build:mobile && cap sync",
-    "mobile:android": "npm run mobile:sync && cap open android",
-    "mobile:ios": "npm run mobile:sync && cap open ios",
-    "version": "node scripts/sync-version.cjs"
+    "build:mobile": "node scripts/build-mobile.cjs",
+    "mobile:sync": "node scripts/sync-version.cjs",
+    "mobile:android": "node scripts/build-mobile.cjs --open-android",
+    "mobile:ios": "node scripts/build-mobile.cjs --open-ios",
+    "version": "node scripts/sync-version.cjs",
+    "test:native:reference": "node --experimental-strip-types scripts/native-reference.mjs",
+    "test:native:ios": "node scripts/test-native-ios.cjs",
+    "test:native:android": "./android/gradlew -p android connectedDebugAndroidTest"
   },
   "dependencies": {
     "@capacitor/android": "8.5.2",
