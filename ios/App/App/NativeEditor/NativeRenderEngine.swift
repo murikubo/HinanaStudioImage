@@ -92,6 +92,9 @@ final class NativeRenderEngine {
         .applyOrientationProperty: true, .cacheImmediately: false,
       ]
       if #available(iOS 17.0, *) { options[.expandToHDR] = true }
+      if #available(iOS 18.0, *), let headroom = properties["Headroom"] as? NSNumber {
+        options[.contentHeadroom] = headroom
+      }
       if pq { options[.colorSpace] = CGColorSpace(name: CGColorSpace.itur_2100_PQ)! }
       guard let output = CIImage(contentsOf: url, options: options) else {
         throw NativeImageError.invalid("지원하지 않는 사진입니다.")
@@ -343,7 +346,7 @@ final class NativeRenderEngine {
   }
   func writePNG(
     _ input: CIImage, url: URL, space: String, depth: Int, properties: [String: Any],
-    settings: NativeSettings
+    settings: NativeSettings, opaque: Bool = false
   ) throws {
     let hdr = space == "hdr"
     let color = CGColorSpace(
@@ -364,7 +367,8 @@ final class NativeRenderEngine {
     }
     let writer = try NativePNGWriter(
       url: url, width: width, height: height, depth: depth, profile: profile, hdr: hdr,
-      exif: NativePNGWriter.exif(normalizedProperties(properties, width: width, height: height)))
+      exif: NativePNGWriter.exif(normalizedProperties(properties, width: width, height: height)),
+      opaque: opaque)
     let rowSize = width * 4 * (depth == 16 ? 2 : 1)
     for top in stride(from: 0, to: height, by: 128) {
       try autoreleasepool {
@@ -402,7 +406,22 @@ final class NativeRenderEngine {
               }
             }
           }
-          try writer.row(scan)
+          if opaque {
+            let sampleBytes = depth / 8
+            var rgb = Data(count: width * 3 * sampleBytes)
+            rgb.withUnsafeMutableBytes { output in
+              scan.withUnsafeBytes { input in
+                for pixel in 0..<width {
+                  output.baseAddress!.advanced(by: pixel * 3 * sampleBytes).copyMemory(
+                    from: input.baseAddress!.advanced(by: pixel * 4 * sampleBytes),
+                    byteCount: 3 * sampleBytes)
+                }
+              }
+            }
+            try writer.row(rgb)
+          } else {
+            try writer.row(scan)
+          }
         }
       }
     }
@@ -413,7 +432,8 @@ final class NativeRenderEngine {
     preserve: Bool
   ) throws -> URL {
     let source = try self.source(url)
-    let sdr = photo.settings.hdr && format != "hdr-png"
+    let adaptiveHDR = photo.settings.hdr && (format == "jpeg" || format == "heif")
+    let sdr = photo.settings.hdr && format != "hdr-png" && !adaptiveHDR
     var image = try render(source.image, photo.settings, sdr: sdr)
     let scale = min(1, maxSide / max(image.extent.width, image.extent.height))
     if scale < 1 { image = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale)) }
@@ -433,13 +453,15 @@ final class NativeRenderEngine {
     var tiff = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any] ?? [:]
     tiff[kCGImagePropertyTIFFOrientation as String] = 1
     properties[kCGImagePropertyTIFFDictionary as String] = tiff
-    let ext = format.contains("png") ? "png" : format == "webp" ? "webp" : "jpg"
+    let ext =
+      format.contains("png") ? "png" : format == "webp" ? "webp" : format == "heif" ? "heic" : "jpg"
     let target = FileManager.default.temporaryDirectory.appendingPathComponent(
       URL(fileURLWithPath: photo.name).deletingPathExtension().lastPathComponent + "-edited." + ext)
     if format.contains("png") {
       try writePNG(
         image, url: target, space: format == "hdr-png" ? "hdr" : space,
-        depth: format == "png" ? 8 : 16, properties: properties, settings: photo.settings)
+        depth: format == "png" ? 8 : 16, properties: properties, settings: photo.settings,
+        opaque: (source.properties[kCGImagePropertyHasAlpha as String] as? Bool) != true)
     } else if format == "webp" {
       guard image.extent.width * image.extent.height <= 32_000_000 else {
         throw NativeImageError.invalid("32MP 초과 출력은 PNG를 사용해 주세요.")
@@ -484,15 +506,32 @@ final class NativeRenderEngine {
       }
       let cs = CGColorSpace(
         name: space == "display-p3" ? CGColorSpace.displayP3 : CGColorSpace.sRGB)!
-      guard
-        let cg = context(photo.settings).createCGImage(
-          image, from: image.extent, format: .RGBA8, colorSpace: cs),
-        let dest = CGImageDestinationCreateWithURL(
-          target as CFURL, UTType.jpeg.identifier as CFString, 1, nil)
-      else { throw NativeImageError.invalid("JPEG 렌더링 실패") }
-      properties[kCGImageDestinationLossyCompressionQuality as String] = quality
-      CGImageDestinationAddImage(dest, cg, properties as CFDictionary)
-      guard CGImageDestinationFinalize(dest) else { throw NativeImageError.invalid("JPEG 저장 실패") }
+      var options: [CIImageRepresentationOption: Any] = [
+        CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String):
+          quality
+      ]
+      var base = image
+      if adaptiveHDR {
+        guard #available(iOS 18.0, *) else {
+          throw NativeImageError.invalid("HDR JPEG·HEIF 출력에는 iOS 18 이상이 필요합니다. HDR PNG를 선택하세요.")
+        }
+        if #available(iOS 26.0, *) {
+          image = image.settingContentHeadroom(Float(photo.settings["hdrPeak"] / 203))
+        }
+        options[.hdrImage] = image
+        options[.hdrGainMapAsRGB] = true
+        base = try render(source.image, photo.settings, sdr: true)
+        if scale < 1 { base = base.transformed(by: CGAffineTransform(scaleX: scale, y: scale)) }
+      }
+      // Attach normalized EXIF to the SDR base; Core Image derives a NEW gain map from the edited HDR image.
+      base = base.settingProperties(properties)
+      if format == "heif" {
+        try context(photo.settings).writeHEIFRepresentation(
+          of: base, to: target, format: .RGBA8, colorSpace: cs, options: options)
+      } else {
+        try context(photo.settings).writeJPEGRepresentation(
+          of: base, to: target, colorSpace: cs, options: options)
+      }
     }
     return target
   }

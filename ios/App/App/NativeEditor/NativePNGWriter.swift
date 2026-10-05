@@ -9,10 +9,15 @@ final class NativePNGWriter {
   private let handle: FileHandle
   private var stream = z_stream()
   private var finished = false
+  private var previous = [UInt8]()
+  private let bytesPerPixel: Int
   private let compressedSize = 65_536
 
-  init(url: URL, width: Int, height: Int, depth: Int, profile: Data?, hdr: Bool, exif: Data?) throws
-  {
+  init(
+    url: URL, width: Int, height: Int, depth: Int, profile: Data?, hdr: Bool, exif: Data?,
+    opaque: Bool = false
+  ) throws {
+    bytesPerPixel = (opaque ? 3 : 4) * (depth / 8)
     FileManager.default.createFile(atPath: url.path, contents: nil)
     handle = try FileHandle(forWritingTo: url)
     guard deflateInit_(&stream, 6, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size)) == Z_OK else {
@@ -22,7 +27,7 @@ final class NativePNGWriter {
     var header = Data()
     header.appendInteger(UInt32(width))
     header.appendInteger(UInt32(height))
-    header.append(contentsOf: [UInt8(depth), 6, 0, 0, 0])
+    header.append(contentsOf: [UInt8(depth), opaque ? 2 : 6, 0, 0, 0])
     try chunk("IHDR", header)
     if let profile {
       var capacity = compressBound(uLong(profile.count))
@@ -85,7 +90,46 @@ final class NativePNGWriter {
       stream.next_out = nil
     }
   }
-  func row(_ bytes: Data) throws { try compress(Data([0]) + bytes, finish: false) }
+  func row(_ bytes: Data) throws {
+    let raw = [UInt8](bytes)
+    if previous.isEmpty { previous = [UInt8](repeating: 0, count: raw.count) }
+    guard previous.count == raw.count else { throw NativeImageError.invalid("PNG 행 크기가 다릅니다.") }
+    var best = raw
+    var bestType: UInt8 = 0
+    var bestScore = Int.max
+    for filter in 0...4 {
+      var candidate = [UInt8](repeating: 0, count: raw.count)
+      var score = 0
+      for i in raw.indices {
+        let left = i >= bytesPerPixel ? Int(raw[i - bytesPerPixel]) : 0
+        let up = Int(previous[i])
+        let diagonal = i >= bytesPerPixel ? Int(previous[i - bytesPerPixel]) : 0
+        let predictor: Int
+        switch filter {
+        case 1: predictor = left
+        case 2: predictor = up
+        case 3: predictor = (left + up) / 2
+        case 4:
+          let p = left + up - diagonal
+          let a = abs(p - left)
+          let b = abs(p - up)
+          let c = abs(p - diagonal)
+          predictor = a <= b && a <= c ? left : b <= c ? up : diagonal
+        default: predictor = 0
+        }
+        let value = raw[i] &- UInt8(predictor)
+        candidate[i] = value
+        score += abs(Int(Int8(bitPattern: value)))
+      }
+      if score < bestScore {
+        bestScore = score
+        bestType = UInt8(filter)
+        best = candidate
+      }
+    }
+    previous = raw
+    try compress(Data([bestType]) + Data(best), finish: false)
+  }
   func finish() throws {
     guard !finished else { return }
     try compress(Data(), finish: true)

@@ -2,6 +2,8 @@
   import Foundation
   import CoreImage
   import ImageIO
+  import UIKit
+  import zlib
 
   enum NativeDiagnostics {
     static func run() {
@@ -154,6 +156,124 @@
             "name": "project",
             "pass": json["version"] as? Int == 5 && record["src"] as? String != nil
               && (record["adjustments"] as? [String: Any])?["exposure"] as? Double == 0.7,
+          ])
+          // A bright edited fixture must retain actual >SDR pixels, not just an HDR label.
+          let bright = hdrImage.transformed(by: CGAffineTransform(scaleX: 64, y: 64))
+          let brightURL = root.appendingPathComponent("bright.png")
+          try engine.png(bright, space: "hdr", depth: 16, properties: [:], settings: hdrSettings)
+            .write(to: brightURL)
+          let brightPhoto = try library.copyPhoto(brightURL)
+          brightPhoto.settings["exposure"] = 0.25
+          var brightPixel = [Float](repeating: 0, count: 4)
+          let editedBright = try engine.render(
+            try engine.source(library.url(brightPhoto)).image, brightPhoto.settings)
+          brightPixel.withUnsafeMutableBytes {
+            engine.p3.render(
+              editedBright, toBitmap: $0.baseAddress!, rowBytes: 16,
+              bounds: CGRect(x: 20, y: 20, width: 1, height: 1), format: .RGBAf,
+              colorSpace: CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)!)
+          }
+          report.append([
+            "name": "edited-bright-input", "actual": brightPixel.map { Double($0) },
+            "pass": brightPixel[0] > 2,
+          ])
+          for format in ["jpeg", "heif"] {
+            let output = try engine.export(
+              brightPhoto, url: library.url(brightPhoto), format: format,
+              space: "display-p3", maxSide: .infinity, quality: 0.9, preserve: true)
+            let decoded = try engine.source(output)
+            var pixel = [Float](repeating: 0, count: 4)
+            pixel.withUnsafeMutableBytes {
+              engine.p3.render(
+                decoded.image, toBitmap: $0.baseAddress!, rowBytes: 16,
+                bounds: CGRect(x: 20, y: 20, width: 1, height: 1), format: .RGBAf,
+                colorSpace: CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)!)
+            }
+            let exif =
+              decoded.properties[kCGImagePropertyExifDictionary as String] as? [String: Any] ?? [:]
+            let dimensionsOK =
+              (exif[kCGImagePropertyExifPixelXDimension as String] as? NSNumber)?.intValue == 64
+            #if targetEnvironment(simulator)
+              // Simulator ImageIO writes metadata but does not reconstruct gain-map HDR pixels.
+              let valid = decoded.hdr && dimensionsOK
+              let verification = "gainmap-metadata-only; HDR pixels require a physical device"
+            #else
+              let valid = decoded.hdr && pixel[0] > 2 && dimensionsOK
+              let verification = "HDR pixels and gainmap verified"
+            #endif
+            report.append([
+              "name": format + "-edited-hdr-gainmap", "actual": pixel.map { Double($0) },
+              "verification": verification, "pass": valid,
+            ])
+          }
+          if let sample = UIImage(named: "StudioSample"), let ci = CIImage(image: sample) {
+            let resized = ci.transformed(
+              by: CGAffineTransform(scaleX: 640 / ci.extent.width, y: 480 / ci.extent.height))
+            let encoded = try engine.png(resized, space: "srgb", depth: 16, properties: [:])
+            var raw = Data(count: 640 * 480 * 8)
+            raw.withUnsafeMutableBytes {
+              engine.srgb.render(
+                resized, toBitmap: $0.baseAddress!, rowBytes: 640 * 8,
+                bounds: resized.extent, format: .RGBA16,
+                colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
+            }
+            // Match the old writer's unfiltered, big-endian RGBA scanlines.
+            raw.withUnsafeMutableBytes { bytes in
+              let words = bytes.bindMemory(to: UInt16.self)
+              for i in words.indices { words[i] = words[i].bigEndian }
+            }
+            var unfiltered = Data()
+            for row in 0..<480 {
+              unfiltered.append(0)
+              unfiltered.append(raw.subdata(in: row * 5120..<(row + 1) * 5120))
+            }
+            var count = compressBound(uLong(unfiltered.count))
+            var baseline = Data(count: Int(count))
+            let status = baseline.withUnsafeMutableBytes { dst in
+              unfiltered.withUnsafeBytes { src in
+                compress2(
+                  dst.bindMemory(to: Bytef.self).baseAddress!, &count,
+                  src.bindMemory(to: Bytef.self).baseAddress!, uLong(unfiltered.count), 6)
+              }
+            }
+            report.append([
+              "name": "png-photo-adaptive-compression", "bytes": encoded.count,
+              "oldBytes": Int(count), "pass": status == Z_OK && encoded.count < Int(count),
+            ])
+            var decoded = Data(count: raw.count)
+            decoded.withUnsafeMutableBytes {
+              engine.srgb.render(
+                CIImage(data: encoded)!, toBitmap: $0.baseAddress!,
+                rowBytes: 5120, bounds: resized.extent, format: .RGBA16,
+                colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
+            }
+            decoded.withUnsafeMutableBytes { bytes in
+              let words = bytes.bindMemory(to: UInt16.self)
+              for i in words.indices { words[i] = words[i].bigEndian }
+            }
+            var maxError = 0
+            for i in stride(from: 0, to: raw.count, by: 2) {
+              let expected = Int(raw[i]) * 256 + Int(raw[i + 1])
+              let actual = Int(decoded[i]) * 256 + Int(decoded[i + 1])
+              maxError = max(maxError, abs(expected - actual))
+            }
+            report.append([
+              "name": "png-photo-lossless-roundtrip", "max16BitError": maxError,
+              "pass": maxError <= 4,
+            ])
+          }
+          let opaquePNG = root.appendingPathComponent("opaque.png")
+          try engine.writePNG(
+            source, url: opaquePNG, space: "srgb", depth: 16, properties: [:],
+            settings: NativeSettings(), opaque: true)
+          let opaqueHeader = try Data(contentsOf: opaquePNG)
+          let opaqueImage = CGImageSourceCreateWithURL(opaquePNG as CFURL, nil)!
+          let opaqueProperties =
+            CGImageSourceCopyPropertiesAtIndex(opaqueImage, 0, nil) as! [String: Any]
+          report.append([
+            "name": "png-opaque-rgb",
+            "pass": opaqueHeader[25] == 2
+              && opaqueProperties[kCGImagePropertyPixelWidth as String] as? Int == 640,
           ])
           for format in ["jpeg", "png", "png16", "hdr-png", "webp"] {
             let export = try engine.export(

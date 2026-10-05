@@ -11,7 +11,12 @@ struct NativeStudioView: View {
   @State private var panel = "편집"
   @State private var query = ""
   @State private var stars = false
-  @State private var picker = ""
+  @State private var sourceMenu = false
+  @State private var picker: ImportRoute?
+  private enum ImportRoute: String, Identifiable {
+    case photos, images, project
+    var id: String { rawValue }
+  }
   @State private var about = false
   @State private var exporting = false
   @State private var sharing: URL?
@@ -53,7 +58,7 @@ struct NativeStudioView: View {
           Image(systemName: "photo.on.rectangle.angled").font(.system(size: 42)).foregroundStyle(
             accent)
           Text("사진을 추가해 편집을 시작하세요.").padding()
-          Button("사진 추가") { picker = "source" }
+          Button("사진 추가") { sourceMenu = true }
           Spacer()
         }
         bottomNavigation
@@ -74,32 +79,44 @@ struct NativeStudioView: View {
     }
     .sheet(item: Binding(get: { sharing.map { SharedFile(url: $0) } }, set: { sharing = $0?.url }))
     { ActivitySheet(url: $0.url) }
-    .confirmationDialog(
-      "사진 추가", isPresented: Binding(get: { picker == "source" }, set: { if !$0 { picker = "" } }),
-      titleVisibility: .visible
-    ) {
-      Button("사진 보관함에서 선택") { picker = "photos" }
-      Button("파일에서 선택") { picker = "images" }
-    }
-    .sheet(isPresented: Binding(get: { picker == "photos" }, set: { if !$0 { picker = "" } })) {
-      PhotoLibraryPicker { urls in
-        picker = ""
-        library.importFiles(urls)
-        section = "편집"
+    .overlay {
+      if sourceMenu {
+        ZStack {
+          Color.black.opacity(0.6).ignoresSafeArea().onTapGesture { sourceMenu = false }
+          VStack(spacing: 18) {
+            Text("사진 추가").font(.headline)
+            Button("사진 보관함에서 선택") {
+              sourceMenu = false
+              picker = .photos
+            }
+            Button("파일에서 선택") {
+              sourceMenu = false
+              picker = .images
+            }
+            Button("취소") { sourceMenu = false }
+          }.buttonStyle(StudioOutlineButtonStyle()).tint(accent).padding(28).background(
+            Color(red: 0.12, green: 0.14, blue: 0.13)
+          )
+          .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
       }
     }
-    .sheet(
-      isPresented: Binding(
-        get: { picker == "images" || picker == "project" }, set: { if !$0 { picker = "" } })
-    ) {
-      NativeDocumentPicker(project: picker == "project") { urls in
-        let project = picker == "project"
-        picker = ""
-        if project, let url = urls.first {
-          library.importProject(url) { section = "편집" }
-        } else {
+    .sheet(item: $picker) { route in
+      if route == .photos {
+        PhotoLibraryPicker { urls in
+          picker = nil
           library.importFiles(urls)
           section = "편집"
+        }
+      } else {
+        NativeDocumentPicker(project: route == .project) { urls in
+          picker = nil
+          if route == .project, let url = urls.first {
+            library.importProject(url) { section = "편집" }
+          } else {
+            library.importFiles(urls)
+            section = "편집"
+          }
         }
       }
     }
@@ -144,7 +161,7 @@ struct NativeStudioView: View {
       }
       Spacer()
       Button {
-        picker = "project"
+        picker = .project
       } label: {
         Image(systemName: "folder").frame(width: 38, height: 38).overlay(
           RoundedRectangle(cornerRadius: 5).stroke(Color.white.opacity(0.18)))
@@ -162,6 +179,7 @@ struct NativeStudioView: View {
       Button {
         if let p = library.current {
           exportSpace = p.settings.string("colorSpace")
+          exportFormat = p.settings.hdr ? "heif" : "jpeg"
           exporting = true
         }
       } label: {
@@ -272,7 +290,7 @@ struct NativeStudioView: View {
   }
   private var bottomNavigation: some View {
     HStack(spacing: 0) {
-      navigationItem("사진 추가", "plus", active: false) { picker = "source" }
+      navigationItem("사진 추가", "plus", active: false) { sourceMenu = true }
       navigationItem("사진", "photo.on.rectangle", active: section == "사진") { section = "사진" }
       navigationItem("편집", "slider.horizontal.3", active: section == "편집" && panel != "프리셋") {
         section = "편집"
@@ -548,7 +566,7 @@ struct NativeStudioView: View {
   private var presetControls: some View {
     VStack(alignment: .leading, spacing: 14) {
       Button {
-        picker = "source"
+        sourceMenu = true
       } label: {
         Label("사진 추가", systemImage: "plus").frame(maxWidth: .infinity, alignment: .leading)
       }
@@ -926,7 +944,7 @@ struct NativeStudioView: View {
           "이미지 크기", exportSize == 0 ? "원본 해상도" : "긴 변 \(Int(exportSize))px",
           options: [("0", "원본 해상도"), ("4096", "긴 변 4096px"), ("2048", "긴 변 2048px")]
         ) { exportSize = Double($0) ?? 0 }
-        if exportFormat == "jpeg" || exportFormat == "webp" {
+        if exportFormat == "jpeg" || exportFormat == "heif" || exportFormat == "webp" {
           HStack {
             Text("압축 품질")
             Spacer()
@@ -934,6 +952,11 @@ struct NativeStudioView: View {
           }.font(.system(size: 11))
           StudioSlider(value: $quality, in: 0.1...1, onEditingChanged: { _ in }).frame(height: 28)
         }
+        Text(
+          exportFormat.contains("png")
+            ? "PNG는 무손실 형식이라 고해상도·16비트 사진의 용량이 큽니다. 작은 HDR 파일은 HEIF 또는 JPEG를 선택하세요."
+            : "HDR 편집 시 밝기 정보를 게인 맵으로 함께 저장합니다. SDR 뷰어에서도 열 수 있습니다."
+        ).font(.system(size: 10)).foregroundStyle(.secondary)
         Toggle("EXIF 메타데이터 보존", isOn: $preserve).font(.system(size: 12))
         Text("촬영 정보·GPS 등 원본 EXIF 유지 · 방향과 크기는 보정 결과에 맞게 갱신").font(.system(size: 10))
           .foregroundStyle(.secondary).padding(12).background(Color.black.opacity(0.12)).clipShape(
@@ -954,7 +977,8 @@ struct NativeStudioView: View {
   }
   private var exportFormats: [(String, String)] {
     [
-      ("jpeg", "JPEG"), ("png", "PNG · 8비트"), ("png16", "PNG · 16비트"),
+      ("heif", "HEIF · HDR 유지 / 작은 용량"), ("jpeg", "JPEG · HDR 유지"), ("png", "PNG · 8비트 SDR"),
+      ("png16", "PNG · 16비트 SDR"),
       ("hdr-png", "PNG · 16비트 HDR PQ"), ("webp", "WebP"),
     ]
   }
@@ -1063,7 +1087,9 @@ struct PhotoLibraryPicker: UIViewControllerRepresentable {
         }
         guard
           let type = types.first(where: { UTType($0)?.conforms(to: .rawImage) == true })
-            ?? types.first
+            ?? types.first(where: {
+              $0 == UTType.heic.identifier || $0 == UTType.heif.identifier
+            }) ?? types.first
         else { continue }
         group.enter()
         provider.loadFileRepresentation(forTypeIdentifier: type) { url, _ in
