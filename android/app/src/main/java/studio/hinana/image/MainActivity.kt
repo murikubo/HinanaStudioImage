@@ -1060,7 +1060,19 @@ class MainActivity : AppCompatActivity() {
                         )
                         item.addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
                         item.addView(text("›").also { it.setPadding(0, 0, 0, 0) })
-                        item.setOnClickListener { preset(name) }
+                        item.isSelected = selectedPreset() == name
+                        item.background =
+                            GradientDrawable().also {
+                                it.cornerRadius = dp(5).toFloat()
+                                it.setColor(
+                                    if (item.isSelected) Color.argb(25, 207, 222, 179)
+                                    else Color.TRANSPARENT
+                                )
+                            }
+                        item.setOnClickListener {
+                            preset(name)
+                            showControls()
+                        }
                         item.contentDescription = name
                         r.addView(item, LinearLayout.LayoutParams(0, dp(70), 1f))
                     }
@@ -1088,53 +1100,76 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val presetValues =
+        mapOf(
+            "알파인" to
+                mapOf(
+                    "contrast" to 14.0,
+                    "shadows" to 22.0,
+                    "temperature" to -9.0,
+                    "vibrance" to 18.0,
+                    "highlights" to -22.0,
+                ),
+            "골든 아워" to
+                mapOf(
+                    "temperature" to 24.0,
+                    "exposure" to .15,
+                    "highlights" to -25.0,
+                    "shadows" to 15.0,
+                    "fade" to 8.0,
+                    "vibrance" to 12.0,
+                ),
+            "소프트 필름" to
+                mapOf(
+                    "contrast" to -12.0,
+                    "saturation" to -16.0,
+                    "fade" to 22.0,
+                    "temperature" to 10.0,
+                    "shadows" to 16.0,
+                    "vignette" to 16.0,
+                ),
+            "딥 포레스트" to
+                mapOf(
+                    "exposure" to -.25,
+                    "contrast" to 22.0,
+                    "highlights" to -30.0,
+                    "saturation" to -12.0,
+                    "temperature" to -6.0,
+                    "vignette" to 24.0,
+                ),
+            "모노크롬" to
+                mapOf(
+                    "saturation" to -100.0,
+                    "contrast" to 24.0,
+                    "highlights" to -15.0,
+                    "shadows" to 12.0,
+                    "fade" to 5.0,
+                ),
+        )
+
+    private fun selectedPreset(): String? {
+        val settings = library.current?.settings ?: return null
+        val defaults = NativePhoto.defaults()
+        val keys =
+            defaults
+                .keys()
+                .asSequence()
+                .filter {
+                    defaults.opt(it) is Number &&
+                        it !in listOf("hdrPeak", "rotation", "sourceOrientation")
+                }
+                .toList()
+        return (listOf("오리지널") + presetValues.keys).firstOrNull { name ->
+            keys.all { key ->
+                kotlin.math.abs(
+                    settings.optDouble(key) -
+                        (presetValues[name]?.get(key) ?: defaults.optDouble(key))
+                ) < 0.0001
+            }
+        }
+    }
+
     private fun preset(name: String) {
-        val presets =
-            mapOf(
-                "알파인" to
-                    mapOf(
-                        "contrast" to 14.0,
-                        "shadows" to 22.0,
-                        "temperature" to -9.0,
-                        "vibrance" to 18.0,
-                        "highlights" to -22.0,
-                    ),
-                "골든 아워" to
-                    mapOf(
-                        "temperature" to 24.0,
-                        "exposure" to .15,
-                        "highlights" to -25.0,
-                        "shadows" to 15.0,
-                        "fade" to 8.0,
-                        "vibrance" to 12.0,
-                    ),
-                "소프트 필름" to
-                    mapOf(
-                        "contrast" to -12.0,
-                        "saturation" to -16.0,
-                        "fade" to 22.0,
-                        "temperature" to 10.0,
-                        "shadows" to 16.0,
-                        "vignette" to 16.0,
-                    ),
-                "딥 포레스트" to
-                    mapOf(
-                        "exposure" to -.25,
-                        "contrast" to 22.0,
-                        "highlights" to -30.0,
-                        "saturation" to -12.0,
-                        "temperature" to -6.0,
-                        "vignette" to 24.0,
-                    ),
-                "모노크롬" to
-                    mapOf(
-                        "saturation" to -100.0,
-                        "contrast" to 24.0,
-                        "highlights" to -15.0,
-                        "shadows" to 12.0,
-                        "fade" to 5.0,
-                    ),
-            )
         edit { a ->
             val reset = NativePhoto.defaults()
             reset.keys().forEach {
@@ -1150,7 +1185,7 @@ class MainActivity : AppCompatActivity() {
                 )
                     a.put(it, reset.get(it))
             }
-            presets[name]?.forEach { (key, v) -> a.put(key, v) }
+            presetValues[name]?.forEach { (key, v) -> a.put(key, v) }
         }
     }
 

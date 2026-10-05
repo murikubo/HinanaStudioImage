@@ -594,9 +594,9 @@ struct NativeStudioView: View {
               Spacer(minLength: 0)
               Image(systemName: "chevron.right").font(.system(size: 9)).foregroundStyle(.secondary)
             }.padding(6).frame(maxWidth: .infinity, minHeight: 64).background(
-              Color.white.opacity(index == 0 ? 0.025 : 0)
+              accent.opacity(selectedPreset == name ? 0.1 : 0)
             ).clipShape(RoundedRectangle(cornerRadius: 5))
-          }.buttonStyle(.plain)
+          }.buttonStyle(.plain).accessibilityAddTraits(selectedPreset == name ? .isSelected : [])
         }
       }
     }
@@ -643,8 +643,8 @@ struct NativeStudioView: View {
       }.font(.system(size: 12)).padding(.vertical, 16)
     }
   }
-  private func applyPreset(_ name: String) {
-    let values: [String: [String: Double]] = [
+  private var presetValues: [String: [String: Double]] {
+    [
       "알파인": ["contrast": 14, "shadows": 22, "temperature": -9, "vibrance": 18, "highlights": -22],
       "골든 아워": [
         "temperature": 24, "exposure": 0.15, "highlights": -25, "shadows": 15, "fade": 8,
@@ -659,6 +659,21 @@ struct NativeStudioView: View {
         "vignette": 24,
       ], "모노크롬": ["saturation": -100, "contrast": 24, "highlights": -15, "shadows": 12, "fade": 5],
     ]
+  }
+  private var selectedPreset: String? {
+    guard let settings = library.current?.settings else { return nil }
+    let keys = NativeSettings.defaults.filter { key, value in
+      value is NSNumber && !["hdrPeak", "rotation", "flip"].contains(key)
+    }.keys
+    return presetNames.first { name in
+      keys.allSatisfy { key in
+        let expected =
+          presetValues[name]?[key] ?? (NativeSettings.defaults[key] as? NSNumber)?.doubleValue ?? 0
+        return abs(settings[key] - expected) < 0.0001
+      }
+    }
+  }
+  private func applyPreset(_ name: String) {
     library.edit { a in
       let masks = a.masks
       let color = a.string("colorSpace")
@@ -668,7 +683,7 @@ struct NativeStudioView: View {
       a.values["colorSpace"] = color
       a.values["dynamicRange"] = hdr
       a.values["precision"] = "float"
-      for (key, value) in values[name] ?? [:] { a[key] = value }
+      for (key, value) in presetValues[name] ?? [:] { a[key] = value }
     }
   }
   private var maskControls: some View {
