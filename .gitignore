@@ -21,3 +21,6 @@ native/bin/
 *.keystore
 *.p12
 *.mobileprovision
+
+# Kotlin compiler local cache
+android/.kotlin/

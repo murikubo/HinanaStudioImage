@@ -559,7 +559,19 @@ class MainActivity : AppCompatActivity() {
         canvas = NativeCanvas(this)
         canvas.error = { alert(it) }
         canvas.onStroke = { maskStroke(it) }
+        canvas.onLiquify = { value, commit ->
+            library.current?.let { p ->
+                if (p.history.isEmpty()) p.checkpoint()
+                p.settings.put("liquify", value ?: JSONObject.NULL)
+                canvas.changed(comparing, true)
+                if (commit) {
+                    p.checkpoint()
+                    library.persist()
+                }
+            }
+        }
         canvas.selectedMask = if (selectedPanel == "마스크") selectedMask else ""
+        canvas.liquify = selectedPanel == "리퀴파이"
         preview.addView(canvas, LinearLayout.LayoutParams(-1, 0, 1f))
         canvas.load(library)
         val actions = row()
@@ -614,7 +626,7 @@ class MainActivity : AppCompatActivity() {
         canvas.onHistogram = { histogram.bins = it }
         val tabs = row()
         panelTabs = tabs
-        listOf("편집", "색상·톤", "마스크", "정보").forEach { panel ->
+        listOf("편집", "색상·톤", "리퀴파이", "마스크", "정보").forEach { panel ->
             tabs.addView(
                 button(panel) {
                     selectedPanel = panel
@@ -845,6 +857,7 @@ class MainActivity : AppCompatActivity() {
     private fun showControls() {
         controls.removeAllViews()
         canvas.selectedMask = if (selectedPanel == "마스크") selectedMask else ""
+        canvas.liquify = selectedPanel == "리퀴파이"
         val p = library.current ?: return
         when (selectedPanel) {
             "편집" -> {
@@ -905,8 +918,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 selectionRow(
                     "작업 색공간",
-                    if (p.settings.optString("colorSpace") == "display-p3") "Display P3"
-                    else "sRGB",
+                    if (p.settings.optString("colorSpace") == "display-p3") "Display P3" else "sRGB",
                 ) {
                     choices("작업 색공간", listOf("sRGB", "Display P3")) { value ->
                         edit { it.put("colorSpace", if (value == "sRGB") "srgb" else "display-p3") }
@@ -927,15 +939,52 @@ class MainActivity : AppCompatActivity() {
                             .forEach { (key, label) -> slider(label, "mixer_${band}_$key") }
                     }
             }
+            "리퀴파이" -> {
+                controls.addView(text("리퀴파이 · 밀기"))
+                controls.addView(text("사진 위를 밀어 변형하세요. 두 손가락 확대·이동, 한 획씩 실행 취소할 수 있습니다."))
+                for (isRadius in listOf(true, false)) {
+                    val title = text(if (isRadius) "브러시 크기" else "강도")
+                    controls.addView(title)
+                    controls.addView(
+                        SeekBar(this).also { bar ->
+                            bar.max = 100
+                            bar.progress =
+                                if (isRadius) ((canvas.liquifyRadius - .05) / .25 * 100).toInt()
+                                else ((canvas.liquifyStrength - .1) / .9 * 100).toInt()
+                            bar.contentDescription = if (isRadius) "리퀴파이 브러시 크기" else "리퀴파이 강도"
+                            bar.setOnSeekBarChangeListener(
+                                object : SeekBar.OnSeekBarChangeListener {
+                                    override fun onProgressChanged(
+                                        s: SeekBar?,
+                                        v: Int,
+                                        user: Boolean,
+                                    ) {
+                                        if (user) {
+                                            if (isRadius) canvas.liquifyRadius = .05 + .25 * v / 100
+                                            else canvas.liquifyStrength = .1 + .9 * v / 100
+                                        }
+                                    }
+
+                                    override fun onStartTrackingTouch(s: SeekBar?) {}
+
+                                    override fun onStopTrackingTouch(s: SeekBar?) {}
+                                }
+                            )
+                        }
+                    )
+                }
+                controls.addView(button("변형만 초기화") { edit { it.put("liquify", JSONObject.NULL) } })
+            }
             "마스크" -> maskControls()
             "정보" -> {
                 controls.addView(text("${p.width} × ${p.height} px"))
                 controls.addView(divider())
                 controls.addView(text("EXIF 촬영 정보").also { it.setTextColor(accent) })
-                val exif = runCatching {
-                    androidx.exifinterface.media.ExifInterface(File(library.root, p.file))
-                }
-                    .getOrNull()
+                val exif =
+                    runCatching {
+                            androidx.exifinterface.media.ExifInterface(File(library.root, p.file))
+                        }
+                        .getOrNull()
                 listOf(
                         "Make",
                         "Model",
@@ -1181,6 +1230,7 @@ class MainActivity : AppCompatActivity() {
                             "dynamicRange",
                             "hdrPeak",
                             "sourceOrientation",
+                            "liquify",
                         )
                 )
                     a.put(it, reset.get(it))

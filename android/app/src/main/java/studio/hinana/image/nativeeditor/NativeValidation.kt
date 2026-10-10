@@ -33,6 +33,8 @@ object NativeValidation {
                 if (key.startsWith("skin") || key == "hdrHighlights") require(n >= 0)
             }
         }
+        NativeLiquify(a.optJSONObject("liquify"))
+        require(a.isNull("liquify") || a.opt("liquify") is JSONObject)
         val masks = a.getJSONArray("masks")
         require(masks.length() <= 8)
         val ids = mutableSetOf<String>()

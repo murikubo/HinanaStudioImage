@@ -229,7 +229,7 @@ final class NativeLibrary: ObservableObject {
         stream.open()
         defer { stream.close() }
         guard let json = try JSONSerialization.jsonObject(with: stream) as? [String: Any],
-          let version = json["version"] as? Int, (1...5).contains(version),
+          let version = json["version"] as? Int, (1...6).contains(version),
           let items = json["photos"] as? [[String: Any]], items.count <= 200
         else { throw NativeImageError.invalid("지원하지 않는 프로젝트 형식입니다.") }
         var ids = Set<String>()
@@ -292,7 +292,7 @@ final class NativeLibrary: ObservableObject {
     let escaped = String(
       data: try JSONSerialization.data(withJSONObject: selected, options: .fragmentsAllowed),
       encoding: .utf8)!
-    try write("{\"version\":5,\"selected\":\(escaped),\"photos\":[")
+    try write("{\"version\":6,\"selected\":\(escaped),\"photos\":[")
     for (index, p) in photos.enumerated() {
       if index > 0 { try write(",") }
       var record = p.manifest

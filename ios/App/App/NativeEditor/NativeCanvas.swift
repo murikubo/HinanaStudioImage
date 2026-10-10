@@ -7,6 +7,10 @@ struct NativeCanvas: UIViewRepresentable {
   var compare: Bool
   var proofSDR: Bool
   var maskID: String
+  var liquify: Bool
+  var brushRadius: Double
+  var brushStrength: Double
+  var onLiquify: ([String: Any]?, Bool) -> Void
   var maskTool: String
   var overlay: Bool
   var zoomRequest: Double
@@ -20,6 +24,10 @@ struct NativeCanvas: UIViewRepresentable {
     view.onHistogram = onHistogram
     view.onPoints = onPoints
     view.maskTool = maskTool
+    view.liquify = liquify && !compare
+    view.brushRadius = brushRadius
+    view.brushStrength = brushStrength
+    view.onLiquify = onLiquify
     view.load(
       library: library, compare: compare, proofSDR: proofSDR, maskID: maskID, overlay: overlay)
     view.applyZoom(zoomRequest, revision: zoomRevision)
@@ -43,6 +51,14 @@ final class NativeMetalCanvas: MTKView, UIGestureRecognizerDelegate {
   private var drawing: [NativePoint] = []
   private var activeMask: NativeMask?
   private var overlayImage: CIImage?
+  var liquify = false, brushRadius = 0.1, brushStrength = 0.5
+  var onLiquify: (([String: Any]?, Bool) -> Void)?
+  private var warp: NativeLiquify?
+  private var warpStart: [String: Any]?
+  private var warpPoint: NativePoint?
+  private var warpTime = 0.0
+  private var warpChanged = false
+  private let brushOutline = CAShapeLayer()
   var maskTool = "ai"
   var onPoints: (([NativePoint]) -> Void)?
   override init(frame: CGRect, device: MTLDevice?) {
@@ -56,6 +72,10 @@ final class NativeMetalCanvas: MTKView, UIGestureRecognizerDelegate {
     setup()
   }
   func setup() {
+    brushOutline.fillColor = UIColor.clear.cgColor
+    brushOutline.strokeColor = UIColor(red: 0.81, green: 0.87, blue: 0.7, alpha: 1).cgColor
+    brushOutline.lineWidth = 1.5
+    layer.addSublayer(brushOutline)
     framebufferOnly = false
     colorPixelFormat = .rgba16Float
     (layer as? CAMetalLayer)?.colorspace = CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)
@@ -125,6 +145,7 @@ final class NativeMetalCanvas: MTKView, UIGestureRecognizerDelegate {
     let url = library.url(photo)
     let a = settings
     let selectedMask = activeMask
+    let interactiveWarp = warp != nil
     library.work.async {
       self.pendingLock.lock()
       let latest = self.pendingToken == token
@@ -149,18 +170,22 @@ final class NativeMetalCanvas: MTKView, UIGestureRecognizerDelegate {
             ])
           coverage = try self.engine.geometry(selection, a)
         }
-        let histogramImage = image.transformed(
-          by: CGAffineTransform(scaleX: 64 / image.extent.width, y: 64 / image.extent.height))
-        var pixels = [UInt8](repeating: 0, count: 64 * 64 * 4)
-        pixels.withUnsafeMutableBytes {
-          self.engine.context(a).render(
-            histogramImage, toBitmap: $0.baseAddress!, rowBytes: 64 * 4,
-            bounds: CGRect(x: 0, y: 0, width: 64, height: 64), format: .RGBA8,
-            colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
-        }
-        var histogram = [[Int]](repeating: [Int](repeating: 0, count: 64), count: 3)
-        for i in stride(from: 0, to: pixels.count, by: 4) {
-          for channel in 0..<3 { histogram[channel][Int(pixels[i + channel]) / 4] += 1 }
+        var histogram: [[Int]]?
+        if !interactiveWarp {
+          let histogramImage = image.transformed(
+            by: CGAffineTransform(scaleX: 64 / image.extent.width, y: 64 / image.extent.height))
+          var pixels = [UInt8](repeating: 0, count: 64 * 64 * 4)
+          pixels.withUnsafeMutableBytes {
+            self.engine.context(a).render(
+              histogramImage, toBitmap: $0.baseAddress!, rowBytes: 64 * 4,
+              bounds: CGRect(x: 0, y: 0, width: 64, height: 64), format: .RGBA8,
+              colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
+          }
+          var bins = [[Int]](repeating: [Int](repeating: 0, count: 64), count: 3)
+          for i in stride(from: 0, to: pixels.count, by: 4) {
+            for channel in 0..<3 { bins[channel][Int(pixels[i + channel]) / 4] += 1 }
+          }
+          histogram = bins
         }
         DispatchQueue.main.async {
           guard self.serial == token else { return }
@@ -169,7 +194,7 @@ final class NativeMetalCanvas: MTKView, UIGestureRecognizerDelegate {
           self.overlayImage = coverage
           self.clampPan()
           self.reportZoom()
-          self.onHistogram?(histogram)
+          if let histogram { self.onHistogram?(histogram) }
           self.setNeedsDisplay()
         }
       } catch {
@@ -254,6 +279,7 @@ final class NativeMetalCanvas: MTKView, UIGestureRecognizerDelegate {
     guard image != nil else { return }
     let p = recognizer.location(in: self)
     if recognizer.state == .began {
+      cancelLiquify()
       scaleStart = zoom
       let o = origin
       pinchAnchor = CGPoint(x: (p.x - o.x) / scale, y: (p.y - o.y) / scale)
@@ -292,7 +318,59 @@ final class NativeMetalCanvas: MTKView, UIGestureRecognizerDelegate {
       onPoints?([p])
     }
   }
+  private func cancelLiquify() {
+    if warpChanged { onLiquify?(warpStart, false) }
+    brushOutline.path = nil
+    warpChanged = false
+    warp = nil
+    warpPoint = nil
+  }
   @objc func moved(_ recognizer: UIPanGestureRecognizer) {
+    if liquify {
+      if recognizer.state == .began {
+        warpStart = settings.values["liquify"] as? [String: Any]
+        warp = try? NativeLiquify(warpStart)
+        let location = recognizer.location(in: self)
+        let delta = recognizer.translation(in: self)
+        warpPoint = point(CGPoint(x: location.x - delta.x, y: location.y - delta.y))
+        warpTime = 0
+        warpChanged = false
+      }
+      if recognizer.state == .cancelled {
+        cancelLiquify()
+        return
+      }
+      let location = recognizer.location(in: self)
+      let brushSize =
+        brushRadius * min(source?.image.extent.width ?? 1, source?.image.extent.height ?? 1) * scale
+      brushOutline.path =
+        UIBezierPath(
+          ovalIn: CGRect(
+            x: location.x - brushSize, y: location.y - brushSize, width: brushSize * 2,
+            height: brushSize * 2)
+        ).cgPath
+      let now = CACurrentMediaTime()
+      if now - warpTime >= 1.0 / 30 || recognizer.state == .ended,
+        let p = point(recognizer.location(in: self)), let from = warpPoint, let source
+      {
+        if hypot(p.x - from.x, p.y - from.y) > 0.000001 { warpChanged = true }
+        warp?.push(
+          from: from, to: p, radius: brushRadius, strength: brushStrength,
+          width: source.image.extent.width, height: source.image.extent.height)
+        warpPoint = p
+        warpTime = now
+        if warpChanged { onLiquify?(warp?.dictionary, recognizer.state == .ended) }
+      } else if recognizer.state == .ended, warpChanged {
+        onLiquify?(warp?.dictionary, true)
+      }
+      if recognizer.state == .ended {
+        warp = nil
+        warpPoint = nil
+        brushOutline.path = nil
+        warpChanged = false
+      }
+      return
+    }
     if let mask = activeMask, mask.kind != "subject" || (maskTool != "ai" && maskTool != "ai-erase")
     {
       if recognizer.state == .began { drawing = [] }

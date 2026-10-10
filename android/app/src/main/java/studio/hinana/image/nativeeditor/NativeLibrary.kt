@@ -89,6 +89,7 @@ class NativePhoto(
                     .put("crop", "original")
                     .put("flip", false)
                     .put("masks", JSONArray())
+                    .put("liquify", JSONObject.NULL)
             listOf(
                     "exposure",
                     "contrast",
@@ -312,7 +313,7 @@ class NativeLibrary(private val context: Context, rootDirectory: File? = null) {
     fun importProject(file: File) {
         require(file.length() <= 512L * 1024 * 1024) { "프로젝트는 512MB 이하를 지원합니다." }
         val json = JSONObject(file.readText())
-        require(json.getInt("version") in 1..5)
+        require(json.getInt("version") in 1..6)
         val items = json.getJSONArray("photos")
         require(items.length() <= 200)
         val imported = mutableListOf<NativePhoto>()
@@ -387,7 +388,7 @@ class NativeLibrary(private val context: Context, rootDirectory: File? = null) {
     fun project(): File {
         val out = File(context.cacheDir, "Hinana-Workspace.hinanaimage")
         out.bufferedWriter().use { writer ->
-            writer.write("{\"version\":5,\"selected\":${JSONObject.quote(selected)},\"photos\":[")
+            writer.write("{\"version\":6,\"selected\":${JSONObject.quote(selected)},\"photos\":[")
             photos.forEachIndexed { i, p ->
                 if (i > 0) writer.write(",")
                 val v = p.manifest()

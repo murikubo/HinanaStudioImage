@@ -73,7 +73,7 @@ struct NativeSettings {
   static var defaults: [String: Any] {
     var result: [String: Any] = [
       "colorSpace": "srgb", "precision": "legacy", "dynamicRange": "sdr", "hdrPeak": 1000,
-      "crop": "original", "flip": false, "masks": [],
+      "crop": "original", "flip": false, "masks": [], "liquify": NSNull(),
     ]
     for key in [
       "exposure", "contrast", "highlights", "shadows", "whites", "blacks", "temperature", "tint",
@@ -93,6 +93,7 @@ struct NativeSettings {
   }
   static func validated(_ dictionary: [String: Any]) throws -> NativeSettings {
     let a = NativeSettings(dictionary)
+    _ = try NativeLiquify(a.values["liquify"])
     guard ["srgb", "display-p3"].contains(a.string("colorSpace")),
       ["legacy", "float"].contains(a.string("precision")),
       ["sdr", "hdr"].contains(a.string("dynamicRange")),
@@ -260,5 +261,88 @@ enum NativeUndoArchive {
       let values = try JSONSerialization.jsonObject(with: output) as? [String: Any]
     else { throw NativeImageError.invalid("보정 기록 읽기 실패") }
     return try NativeSettings.validated(values)
+  }
+}
+
+/// Fixed-size inverse map: drawing modifies coordinates, never a full-resolution pixel buffer.
+struct NativeLiquify {
+  static let size = 129
+  var data: [Float]
+  init(_ value: Any?) throws {
+    data = [Float](repeating: 0, count: Self.size * Self.size * 2)
+    guard let value, !(value is NSNull) else { return }
+    guard let v = value as? [String: Any], v["width"] as? Int == Self.size,
+      v["height"] as? Int == Self.size, let text = v["data"] as? String,
+      text.count == ((data.count * 4 + 2) / 3) * 4,
+      let bytes = Data(base64Encoded: text), bytes.count == data.count * 4
+    else {
+      throw NativeImageError.invalid("리퀴파이 데이터가 올바르지 않습니다.")
+    }
+    data = bytes.withUnsafeBytes { raw in
+      (0..<data.count).map {
+        Float(
+          bitPattern: UInt32(
+            littleEndian: raw.loadUnaligned(fromByteOffset: $0 * 4, as: UInt32.self)))
+      }
+    }
+    guard data.allSatisfy({ $0.isFinite && abs($0) <= 1 }) else {
+      throw NativeImageError.invalid("리퀴파이 변형 범위가 올바르지 않습니다.")
+    }
+  }
+  var dictionary: [String: Any] {
+    let bytes = data.withUnsafeBytes { Data($0) }
+    return ["width": Self.size, "height": Self.size, "data": bytes.base64EncodedString()]
+  }
+  func sample(_ x: Double, _ y: Double) -> (Double, Double) {
+    let n = Self.size - 1
+    let gx = max(0, min(Double(n), x * Double(n)))
+    let gy = max(0, min(Double(n), y * Double(n)))
+    let ix = min(n - 1, Int(gx))
+    let iy = min(n - 1, Int(gy))
+    let tx = gx - Double(ix)
+    let ty = gy - Double(iy)
+    let p = (iy * Self.size + ix) * 2
+    func at(_ c: Int) -> Double {
+      Double(data[p + c]) * (1 - tx) * (1 - ty) + Double(data[p + 2 + c]) * tx * (1 - ty)
+        + Double(data[p + Self.size * 2 + c]) * (1 - tx) * ty + Double(
+          data[p + Self.size * 2 + 2 + c]) * tx * ty
+    }
+    return (at(0), at(1))
+  }
+  mutating func push(
+    from: NativePoint, to: NativePoint, radius: Double, strength: Double, width: Double,
+    height: Double
+  ) {
+    let rx = radius * min(width, height) / width
+    let ry = radius * min(width, height) / height
+    let steps = min(32, max(1, Int(ceil(hypot((to.x - from.x) / rx, (to.y - from.y) / ry) / 0.2))))
+    let n = Self.size - 1
+    for step in 1...steps {
+      let cx = from.x + (to.x - from.x) * Double(step) / Double(steps)
+      let cy = from.y + (to.y - from.y) * Double(step) / Double(steps)
+      let dx = (to.x - from.x) * strength / Double(steps)
+      let dy = (to.y - from.y) * strength / Double(steps)
+      let old = self
+      let x0 = max(0, Int(floor((cx - rx) * Double(n))))
+      let x1 = min(n, Int(ceil((cx + rx) * Double(n))))
+      let y0 = max(0, Int(floor((cy - ry) * Double(n))))
+      let y1 = min(n, Int(ceil((cy + ry) * Double(n))))
+      guard x0 <= x1 && y0 <= y1 else { continue }
+      for y in y0...y1 {
+        for x in x0...x1 {
+          let px = Double(x) / Double(n)
+          let py = Double(y) / Double(n)
+          let distance = hypot((px - cx) / rx, (py - cy) / ry)
+          if distance >= 1 { continue }
+          let weight = pow(1 - distance * distance, 2)
+          let qx = max(0, min(1, px - dx * weight))
+          let qy = max(0, min(1, py - dy * weight))
+          let offset = old.sample(qx, qy)
+          let p = (y * Self.size + x) * 2
+          data[p] = Float(max(0, min(1, qx + offset.0)) - px)
+          data[p + 1] = Float(max(0, min(1, qy + offset.1)) - py)
+        }
+      }
+    }
   }
 }

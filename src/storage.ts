@@ -1,3 +1,4 @@
+import { validateLiquify } from './liquify.ts';
 import { validateMasks } from './local-masks.ts';
 import { readMetadata, type Metadata } from './metadata';
 import { defaults, type Adjustments } from './engine';
@@ -15,7 +16,7 @@ export type Photo = {
   history: Adjustments[];
   cursor: number;
 };
-export type Project = { version: 1 | 2 | 3 | 4 | 5; photos: Photo[]; selected: string };
+export type Project = { version: 1 | 2 | 3 | 4 | 5 | 6; photos: Photo[]; selected: string };
 function db(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const r = indexedDB.open('hinana-image', 1);
@@ -68,7 +69,12 @@ export function validateProject(value: unknown): Project {
   const p = value as Project;
   if (
     !p ||
-    (p.version !== 1 && p.version !== 2 && p.version !== 3 && p.version !== 4 && p.version !== 5) ||
+    (p.version !== 1 &&
+      p.version !== 2 &&
+      p.version !== 3 &&
+      p.version !== 4 &&
+      p.version !== 5 &&
+      p.version !== 6) ||
     !Array.isArray(p.photos) ||
     p.photos.length > 200
   )
@@ -135,6 +141,7 @@ export function validateProject(value: unknown): Project {
       }
     }
     a.masks = validateMasks(a.masks);
+    a.liquify = validateLiquify(a.liquify);
     photo.adjustments = a;
     photo.history = [a];
     photo.cursor = 0;

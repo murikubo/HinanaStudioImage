@@ -117,6 +117,52 @@
             "name": "hdr-pq-roundtrip", "actual": hdrPixel.map { Double($0) },
             "pass": zip(hdrInput, hdrPixel).allSatisfy { abs($0 - $1) < 0.03 },
           ])
+          var warp = try NativeLiquify(nil)
+          let warpStarted = Date()
+          warp.push(
+            from: NativePoint(x: 0.35, y: 0.3), to: NativePoint(x: 0.45, y: 0.4), radius: 0.2,
+            strength: 0.5, width: 32, height: 32)
+          let warpMS = Date().timeIntervalSince(warpStarted) * 1000
+          let restoredWarp = try NativeLiquify(warp.dictionary)
+          report.append([
+            "name": "liquify-grid-roundtrip", "brushMS": warpMS, "bytes": warp.data.count * 4,
+            "pass": restoredWarp.data == warp.data && warp.sample(0.45, 0.4).0 < -0.01
+              && warp.sample(0.9, 0.9).0 == 0,
+          ])
+          var gradient = [Float](repeating: 0, count: 32 * 32 * 4)
+          for y in 0..<32 {
+            for x in 0..<32 {
+              let p = (y * 32 + x) * 4
+              gradient[p] = Float(x) / 31
+              gradient[p + 1] = Float(y) / 31
+              gradient[p + 2] = 4
+              gradient[p + 3] = 1
+            }
+          }
+          let gradientBytes = gradient.withUnsafeBytes { Data($0) }
+          let gradientImage = CIImage(
+            bitmapData: gradientBytes, bytesPerRow: 32 * 16, size: CGSize(width: 32, height: 32),
+            format: .RGBAf, colorSpace: CGColorSpace(name: CGColorSpace.extendedLinearSRGB)!)
+          let warpSettings = NativeSettings([
+            "liquify": warp.dictionary, "precision": "float", "dynamicRange": "hdr",
+          ])
+          let warped = try engine.render(gradientImage, warpSettings)
+          var warpedPixels = gradient
+          warpedPixels.withUnsafeMutableBytes {
+            engine.srgb.render(
+              warped, toBitmap: $0.baseAddress!, rowBytes: 32 * 16, bounds: gradientImage.extent,
+              format: .RGBAf, colorSpace: CGColorSpace(name: CGColorSpace.extendedLinearSRGB)!)
+          }
+          let offset = warp.sample(14.5 / 32, 12.5 / 32)
+          let at = (12 * 32 + 14) * 4
+          report.append([
+            "name": "liquify-gpu-coordinates-hdr",
+            "actual": [Double(warpedPixels[at]), Double(warpedPixels[at + 1])],
+            "expected": [(14 + offset.0 * 32) / 31, (12 + offset.1 * 32) / 31],
+            "pass": abs(Double(warpedPixels[at]) - (14 + offset.0 * 32) / 31) < 0.003
+              && abs(Double(warpedPixels[at + 1]) - (12 + offset.1 * 32) / 31) < 0.003
+              && warpedPixels[at + 2] > 3.99,
+          ])
           let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "NativeEditorChecks")
           let library = NativeLibrary(root: root)
@@ -154,7 +200,7 @@
           let record = records[0]
           report.append([
             "name": "project",
-            "pass": json["version"] as? Int == 5 && record["src"] as? String != nil
+            "pass": json["version"] as? Int == 6 && record["src"] as? String != nil
               && (record["adjustments"] as? [String: Any])?["exposure"] as? Double == 0.7,
           ])
           // A bright edited fixture must retain actual >SDR pixels, not just an HDR label.

@@ -11,10 +11,11 @@ import kotlin.math.*
 import org.json.JSONObject
 
 class NativeRenderer {
+    private var warpKey = ""
     private var maskKey = ""
     var overlayID = ""
     private var program = 0
-    private val textures = IntArray(5)
+    private val textures = IntArray(6)
     private var bitmapWidth = 1
     private var bitmapHeight = 1
     var photo: NativePhoto? = null
@@ -38,6 +39,7 @@ class NativeRenderer {
             return id
         }
         maskKey = ""
+        warpKey = ""
         program = GL.glCreateProgram()
         val v = shader(GL.GL_VERTEX_SHADER, NativeShaders.vertex)
         val f = shader(GL.GL_FRAGMENT_SHADER, NativeShaders.fragment)
@@ -49,7 +51,7 @@ class NativeRenderer {
         check(status[0] != 0) { GL.glGetProgramInfoLog(program) }
         GL.glDeleteShader(v)
         GL.glDeleteShader(f)
-        GL.glGenTextures(5, textures, 0)
+        GL.glGenTextures(6, textures, 0)
     }
 
     private fun uniform(name: String) = GL.glGetUniformLocation(program, name)
@@ -153,6 +155,32 @@ class NativeRenderer {
             else h = (w / r).roundToInt().toDouble()
         }
         return w to h
+    }
+
+    private fun liquify() {
+        val value = settings.optJSONObject("liquify")
+        one("warpEnabled", if (value == null) 0.0 else 1.0)
+        GL.glUniform1i(uniform("warpMap"), 5)
+        val key = value?.optString("data") ?: ""
+        if (value == null || key == warpKey) return
+        val grid = NativeLiquify(value)
+        val buffer = ByteBuffer.allocateDirect(grid.data.size * 4).order(ByteOrder.nativeOrder())
+        buffer.asFloatBuffer().put(grid.data)
+        bind(5)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_NEAREST)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_NEAREST)
+        GL.glTexImage2D(
+            GL.GL_TEXTURE_2D,
+            0,
+            GL.GL_RG32F,
+            NativeLiquify.SIZE,
+            NativeLiquify.SIZE,
+            0,
+            GL.GL_RG,
+            GL.GL_FLOAT,
+            buffer,
+        )
+        warpKey = key
     }
 
     private fun masks() {
@@ -296,6 +324,7 @@ class NativeRenderer {
         one("exportMode", mode.toDouble())
         one("outputP3", if (outputP3) 1.0 else 0.0)
         masks()
+        liquify()
         rebind()
         GL.glEnableVertexAttribArray(0)
         GL.glVertexAttribPointer(0, 2, GL.GL_FLOAT, false, 8, vertices)
@@ -304,7 +333,7 @@ class NativeRenderer {
     }
 
     fun rebind() {
-        for (i in 0..2) bind(i)
+        for (i in listOf(0, 1, 2, 5)) bind(i)
     }
 
     fun histogram(bitmap: Bitmap): Array<IntArray> {
@@ -321,11 +350,12 @@ class NativeRenderer {
                 "epsilonSdr",
                 "epsilonHdr",
             )
-        val gain = names.associateWith {
-            val values = FloatArray(if (it == "gainEnabled" || it == "gainP3") 1 else 3)
-            GL.glGetUniformfv(program, uniform(it), values, 0)
-            values
-        }
+        val gain =
+            names.associateWith {
+                val values = FloatArray(if (it == "gainEnabled" || it == "gainP3") 1 else 3)
+                GL.glGetUniformfv(program, uniform(it), values, 0)
+                values
+            }
         fun swap() {
             val source = textures[0]
             textures[0] = textures[3]
@@ -388,7 +418,7 @@ class NativeRenderer {
     }
 
     fun destroy() {
-        GL.glDeleteTextures(5, textures, 0)
+        GL.glDeleteTextures(6, textures, 0)
         GL.glDeleteProgram(program)
     }
 

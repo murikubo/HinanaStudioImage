@@ -1,3 +1,4 @@
+import { liquifyData, sampleLiquifyInto } from './liquify.ts';
 import { applyLocalMasks } from './local-masks.ts';
 import { adjustPixels, outputSize, type Adjustments } from './engine.ts';
 import { type FloatFrame } from './precision-codec.ts';
@@ -21,12 +22,19 @@ export function renderFloat(source: FloatFrame, a: Adjustments, maxSide: number)
     sin = Math.round(Math.sin(angle));
   const matrix =
     source.colorSpace === a.colorSpace ? undefined : a.colorSpace === 'srgb' ? P3_SRGB : SRGB_P3;
+  const warp = liquifyData(a.liquify),
+    warpOffset = new Float64Array(2);
   for (let y = 0; y < height; y++)
     for (let x = 0; x < width; x++) {
       const dx = ((x + 0.5) / width - 0.5) * cw * (a.flip ? -1 : 1),
         dy = ((y + 0.5) / height - 0.5) * ch;
-      const sx = cos * dx + sin * dy + source.width / 2 - 0.5,
+      let sx = cos * dx + sin * dy + source.width / 2 - 0.5,
         sy = -sin * dx + cos * dy + source.height / 2 - 0.5;
+      if (warp) {
+        sampleLiquifyInto(warp, (sx + 0.5) / source.width, (sy + 0.5) / source.height, warpOffset);
+        sx += warpOffset[0] * source.width;
+        sy += warpOffset[1] * source.height;
+      }
       const fx = Math.floor(sx),
         fy = Math.floor(sy),
         tx = sx - fx,

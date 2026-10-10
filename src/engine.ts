@@ -1,9 +1,12 @@
+import { warpedImage } from './liquify-gpu.ts';
+import type { Liquify } from './liquify.ts';
 import { applyLocalMasks, type LocalMask } from './local-masks.ts';
 import { colorContext, type WorkingColorSpace } from './color-space.ts';
 import { applyColorTools, colorDefaults, type ColorAdjustments } from './color-tools.ts';
 import { retouchSkin } from './retouch.ts';
 export type Adjustments = ColorAdjustments & {
   masks: LocalMask[];
+  liquify: Liquify | null;
   colorSpace: WorkingColorSpace;
   precision: 'legacy' | 'float';
   dynamicRange: 'sdr' | 'hdr';
@@ -31,6 +34,7 @@ export type Adjustments = ColorAdjustments & {
 export const defaults: Adjustments = {
   ...colorDefaults,
   masks: [],
+  liquify: null,
   colorSpace: 'srgb',
   precision: 'legacy',
   dynamicRange: 'sdr',
@@ -196,12 +200,13 @@ export function renderPhoto(
   canvas.width = Math.max(1, Math.round(w * scale));
   canvas.height = Math.max(1, Math.round(h * scale));
   const ctx = colorContext(canvas, a.colorSpace);
+  const picture = a.liquify ? warpedImage(image, a.liquify, scale, a.colorSpace) : image;
   ctx.save();
   ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.scale(a.flip ? -1 : 1, 1);
   ctx.rotate((a.rotation * Math.PI) / 180);
   ctx.drawImage(
-    image,
+    picture,
     (-image.naturalWidth * scale) / 2,
     (-image.naturalHeight * scale) / 2,
     image.naturalWidth * scale,

@@ -104,4 +104,10 @@ float4 nativePQ(sample_t s, float2 settings) {
     c=float3(.627404f*c.r+.329283f*c.g+.043313f*c.b,.069097f*c.r+.919541f*c.g+.011362f*c.b,.016391f*c.r+.088013f*c.g+.895595f*c.b);
     c=clamp(c*203,float3(0),float3(settings.y)); return float4(float3(pq(c.r),pq(c.g),pq(c.b))*s.a,s.a);
 }
+float4 nativeLiquify(coreimage::sampler source, coreimage::sampler field, float2 dimensions, coreimage::destination dest) {
+  float2 offset = field.sample(field.transform(dest.coord())).rg;
+  float2 p = dest.coord() + float2(offset.x * dimensions.x, -offset.y * dimensions.y);
+  p = clamp(p, float2(.5), dimensions - .5);
+  return source.sample(source.transform(p));
+}
 }}

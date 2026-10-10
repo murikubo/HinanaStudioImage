@@ -30,6 +30,15 @@ class NativeCanvas(context: Context) : GLSurfaceView(context), GLSurfaceView.Ren
     private var panY = 0.0
     var showOverlay = true
     var selectedMask = ""
+    var liquify = false
+    var liquifyRadius = .1
+    var liquifyStrength = .5
+    var onLiquify: ((JSONObject?, Boolean) -> Unit)? = null
+    private var warp: NativeLiquify? = null
+    private var warpStart: JSONObject? = null
+    private var warpPoint: Pair<Double, Double>? = null
+    private var warpTime = 0L
+    private var warpChanged = false
     var maskTool = "ai"
     var onStroke: ((List<Pair<Double, Double>>) -> Unit)? = null
     var error: ((String) -> Unit)? = null
@@ -158,7 +167,7 @@ class NativeCanvas(context: Context) : GLSurfaceView(context), GLSurfaceView.Ren
     }
 
     fun changed(compare: Boolean, proof: Boolean) {
-        histogramDirty = true
+        if (warp == null) histogramDirty = true
         val p = library?.current
         val snapshot = p?.settings?.toString() ?: NativePhoto.defaults().toString()
         val geometry =
@@ -227,12 +236,20 @@ class NativeCanvas(context: Context) : GLSurfaceView(context), GLSurfaceView.Ren
         val dimensions = engine.dimensions()
         val ratio = scale()
         val a = JSONObject(p.settings.toString())
+        val grid = NativeLiquify(a.optJSONObject("liquify"))
+        var marginX = 24f
+        var marginY = 24f
+        for (i in grid.data.indices step 2) {
+            marginX = max(marginX, 24 + abs(grid.data[i]) * p.width)
+            marginY = max(marginY, 24 + abs(grid.data[i + 1]) * p.height)
+        }
+        val drawingWarp = warp != null
         val token = ++decodeRevision
         if (disposed) return
         decodeWork.execute {
             if (disposed || token != decodeRevision) return@execute
             try {
-                if (Build.VERSION.SDK_INT < 28 || zoomNow <= 1.01) {
+                if (Build.VERSION.SDK_INT < 28 || zoomNow <= 1.01 || drawingWarp) {
                     val bitmap = NativeRenderer.decode(File(root, p.file))
                     install(bitmap, 0.0 to 0.0, 1.0 to 1.0, token)
                 } else {
@@ -251,10 +268,16 @@ class NativeCanvas(context: Context) : GLSurfaceView(context), GLSurfaceView.Ren
                         }
                     val crop =
                         Rect(
-                            max(0, floor(corners.minOf { it.first }).toInt() - 24),
-                            max(0, floor(corners.minOf { it.second }).toInt() - 24),
-                            min(p.width, ceil(corners.maxOf { it.first }).toInt() + 24),
-                            min(p.height, ceil(corners.maxOf { it.second }).toInt() + 24),
+                            max(0, floor(corners.minOf { it.first }).toInt() - marginX.toInt()),
+                            max(0, floor(corners.minOf { it.second }).toInt() - marginY.toInt()),
+                            min(
+                                p.width,
+                                ceil(corners.maxOf { it.first }).toInt() + marginX.toInt(),
+                            ),
+                            min(
+                                p.height,
+                                ceil(corners.maxOf { it.second }).toInt() + marginY.toInt(),
+                            ),
                         )
                     if (crop.width() > 0 && crop.height() > 0) {
                         val factor =
@@ -372,14 +395,65 @@ class NativeCanvas(context: Context) : GLSurfaceView(context), GLSurfaceView.Ren
             (0.5 + (-n * dx + c * dy) / p.height).coerceIn(0.0, 1.0)
     }
 
+    private fun cancelWarp() {
+        if (warpChanged) onLiquify?.invoke(warpStart, false)
+        warp = null
+        warpPoint = null
+        warpChanged = false
+    }
+
     override fun onTouchEvent(e: MotionEvent): Boolean {
         pinch.onTouchEvent(e)
         taps.onTouchEvent(e)
         if (e.pointerCount > 1 || pinch.isInProgress) {
+            cancelWarp()
             points.clear()
             if (e.actionMasked == MotionEvent.ACTION_POINTER_UP) {
                 refreshTile()
                 reportZoom()
+            }
+            return true
+        }
+        if (liquify && !engine.compare) {
+            val photo = library?.current ?: return true
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    warpStart = photo.settings.optJSONObject("liquify")
+                    warp = NativeLiquify(warpStart)
+                    warpPoint = point(e)
+                    warpTime = 0
+                    warpChanged = false
+                    refreshTile()
+                    parent.requestDisallowInterceptTouchEvent(true)
+                }
+                MotionEvent.ACTION_MOVE,
+                MotionEvent.ACTION_UP -> {
+                    val p = point(e)
+                    val from = warpPoint
+                    val commit = e.actionMasked == MotionEvent.ACTION_UP
+                    if (p != null && from != null && (commit || e.eventTime - warpTime >= 33)) {
+                        if (hypot(p.first - from.first, p.second - from.second) > .000001)
+                            warpChanged = true
+                        warp?.push(
+                            from,
+                            p,
+                            liquifyRadius,
+                            liquifyStrength,
+                            photo.width,
+                            photo.height,
+                        )
+                        warpPoint = p
+                        warpTime = e.eventTime
+                        if (warpChanged) onLiquify?.invoke(warp?.json(), commit)
+                    } else if (commit && warpChanged) onLiquify?.invoke(warp?.json(), true)
+                    if (commit) {
+                        warp = null
+                        warpPoint = null
+                        refreshTile()
+                        parent.requestDisallowInterceptTouchEvent(false)
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> cancelWarp()
             }
             return true
         }

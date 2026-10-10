@@ -1,3 +1,4 @@
+import { LiquifyPanel, LiquifyOverlay } from './LiquifyEditor';
 import {
   nativeIOS,
   NativeImages,
@@ -185,6 +186,8 @@ function App() {
     [toast, setToast] = useState(''),
     [saveMessage, setSaveStatus] = useState('로컬 저장 준비');
   const [removeId, setRemoveId] = useState('');
+  const [liquifyRadius, setLiquifyRadius] = useState(0.1),
+    [liquifyStrength, setLiquifyStrength] = useState(0.5);
   const [view, setView] = useState<'edit' | 'grid'>('edit'),
     [filter, setFilter] = useState<'all' | 'stars'>('all'),
     [query, setQuery] = useState('');
@@ -193,7 +196,7 @@ function App() {
     [zoom, setZoom] = useState(0),
     [cropOpen, setCropOpen] = useState(false),
     [leftOpen, setLeftOpen] = useState(true);
-  const [tab, setTab] = useState<'edit' | 'color' | 'info' | 'mask'>('edit'),
+  const [tab, setTab] = useState<'edit' | 'color' | 'info' | 'mask' | 'liquify'>('edit'),
     [exportOpen, setExportOpen] = useState(false),
     [helpOpen, setHelpOpen] = useState(false);
   const [p3Supported] = useState(supportsDisplayP3);
@@ -263,7 +266,7 @@ function App() {
     gestureHeight,
     zoom,
     setZoom,
-    tab !== 'mask' || compare,
+    (tab !== 'mask' && tab !== 'liquify') || compare,
     selected,
   );
   useEffect(() => {
@@ -313,7 +316,7 @@ function App() {
     let obsolete = false;
     setSaveStatus('저장 중…');
     const timer = setTimeout(() => {
-      saveWorkspace({ version: 5, photos, selected })
+      saveWorkspace({ version: 6, photos, selected })
         .then(() => {
           if (!obsolete) {
             setSavedSnapshot({ photos, selected });
@@ -677,7 +680,7 @@ function App() {
         new Blob(
           [
             JSON.stringify({
-              version: 5,
+              version: 6,
               // Reopening already starts a new undo history; do not duplicate raster masks in JSON.
               photos: photos.map((p) => ({ ...p, history: [], cursor: 0 })),
               selected,
@@ -1185,6 +1188,7 @@ function App() {
                     hdrHighlights: a.hdrHighlights,
                     ...p.values,
                     masks: a.masks,
+                    liquify: a.liquify,
                     skinSmooth: a.skinSmooth,
                     skinRedness: a.skinRedness,
                     skinBrightness: a.skinBrightness,
@@ -1331,6 +1335,23 @@ function App() {
                   ref={canvas}
                   aria-label="보정 사진 미리보기"
                 />
+                {tab === 'liquify' && !compare && !busy && (
+                  <LiquifyOverlay
+                    key={selected}
+                    value={a.liquify}
+                    radius={liquifyRadius}
+                    strength={liquifyStrength}
+                    geometry={{
+                      width: active.width,
+                      height: active.height,
+                      cropWidth: dimensions[0],
+                      cropHeight: dimensions[1],
+                      rotation: a.rotation,
+                      flip: a.flip,
+                    }}
+                    onChange={(liquify, commit) => change({ liquify }, commit)}
+                  />
+                )}
                 {tab === 'mask' && !compare && !busy && (
                   <MaskOverlay
                     key={selected}
@@ -1590,6 +1611,9 @@ function App() {
           <button className={tab === 'color' ? 'active' : ''} onClick={() => setTab('color')}>
             <Palette size={15} /> 색상·톤
           </button>
+          <button className={tab === 'liquify' ? 'active' : ''} onClick={() => setTab('liquify')}>
+            리퀴파이
+          </button>
           <button className={tab === 'mask' ? 'active' : ''} onClick={() => setTab('mask')}>
             ◉ 마스크
           </button>
@@ -1598,7 +1622,7 @@ function App() {
           </button>
         </div>
         <div className="adjust-scroll" key={tab}>
-          {tab !== 'info' && tab !== 'mask' && (
+          {tab !== 'info' && tab !== 'mask' && tab !== 'liquify' && (
             <section className="color-management" aria-label="색상 관리">
               <label>
                 편집 정밀도
@@ -1816,6 +1840,15 @@ function App() {
                 </>
               )}
             </section>
+          ) : tab === 'liquify' ? (
+            <LiquifyPanel
+              radius={liquifyRadius}
+              strength={liquifyStrength}
+              onRadius={setLiquifyRadius}
+              onStrength={setLiquifyStrength}
+              disabled={!active || compare || !!busy}
+              onReset={() => change({ liquify: null }, true)}
+            />
           ) : tab === 'mask' ? (
             <MaskPanel
               masks={a.masks}

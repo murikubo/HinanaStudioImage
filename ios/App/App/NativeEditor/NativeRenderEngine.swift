@@ -16,6 +16,7 @@ final class NativeRenderEngine {
   let device: MTLDevice
   let queue: MTLCommandQueue
   let p3: CIContext, srgb: CIContext
+  private var liquifyCache: (String, CIImage, Double)?
   private var kernels: [String: CIKernel] = [:]
   private var maskCache: [String: (shape: NativeMask, size: CGSize, image: CIImage)] = [:]
   init() {
@@ -39,7 +40,7 @@ final class NativeRenderEngine {
       for name in [
         "nativeQuantize", "nativeExposure", "nativeEdit", "nativeSkin", "nativeBilateral",
         "nativeCoverage",
-        "nativeLocal", "nativeRange", "nativePQ",
+        "nativeLocal", "nativeRange", "nativePQ", "nativeLiquify",
       ] {
         kernels[name] = try CIKernel(functionName: name, fromMetalLibraryData: data)
       }
@@ -134,6 +135,48 @@ final class NativeRenderEngine {
     else { throw NativeImageError.invalid("네이티브 보정 엔진을 실행하지 못했습니다: \(name)") }
     return image
   }
+  func liquified(_ source: CIImage, _ settings: NativeSettings) throws -> CIImage {
+    guard let value = settings.values["liquify"] as? [String: Any],
+      let key = value["data"] as? String
+    else { return source }
+    if liquifyCache?.0 != key {
+      let grid = try NativeLiquify(value)
+      var pixels = [Float](repeating: 0, count: NativeLiquify.size * NativeLiquify.size * 4)
+      var bound = 0.0
+      for i in 0..<grid.data.count / 2 {
+        pixels[i * 4] = grid.data[i * 2]
+        pixels[i * 4 + 1] = grid.data[i * 2 + 1]
+        pixels[i * 4 + 3] = 1
+        bound = max(bound, Double(abs(grid.data[i * 2])), Double(abs(grid.data[i * 2 + 1])))
+      }
+      let bytes = pixels.withUnsafeBytes { Data($0) }
+      let field = CIImage(
+        bitmapData: bytes, bytesPerRow: NativeLiquify.size * 16,
+        size: CGSize(width: NativeLiquify.size, height: NativeLiquify.size), format: .RGBAf,
+        colorSpace: nil)
+      liquifyCache = (key, field, bound)
+    }
+    let field = liquifyCache!.1.transformed(
+      by: CGAffineTransform(
+        scaleX: source.extent.width / Double(NativeLiquify.size - 1),
+        y: source.extent.height / Double(NativeLiquify.size - 1)
+      ).concatenating(
+        CGAffineTransform(
+          translationX: -source.extent.width / Double((NativeLiquify.size - 1) * 2),
+          y: -source.extent.height / Double((NativeLiquify.size - 1) * 2))))
+    let padding = liquifyCache!.2 * max(source.extent.width, source.extent.height) + 3
+    guard let kernel = kernels["nativeLiquify"],
+      let output = kernel.apply(
+        extent: source.extent,
+        roiCallback: { index, rect in
+          index == 0 ? rect.insetBy(dx: -padding, dy: -padding).intersection(source.extent) : rect
+        },
+        arguments: [source, field, CIVector(x: source.extent.width, y: source.extent.height)])
+    else {
+      throw NativeImageError.invalid("리퀴파이 GPU 처리를 시작하지 못했습니다.")
+    }
+    return output
+  }
   func geometry(_ image: CIImage, _ a: NativeSettings) -> CIImage {
     let rotation = Int(a["rotation"]) % 360
     var result = image.oriented(
@@ -150,7 +193,7 @@ final class NativeRenderEngine {
   func render(_ source: CIImage, _ a: NativeSettings, compare: Bool = false, sdr: Bool = false)
     throws -> CIImage
   {
-    var image = geometry(source, a)
+    var image = geometry(compare ? source : try liquified(source, a), a)
     let extent = image.extent
     if compare { return image }
     let legacy = a.string("precision") == "legacy" ? 1.0 : 0.0

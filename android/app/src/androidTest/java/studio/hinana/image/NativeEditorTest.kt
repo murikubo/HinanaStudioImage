@@ -99,6 +99,50 @@ class NativeEditorTest {
     }
 
     @Test
+    fun liquifyGridGpuExportAndUndo() {
+        val library = isolated()
+        val file = File(library.root, "liquify.png")
+        val original = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888)
+        for (y in 0..31) for (x in 0..31) original.setPixel(
+            x,
+            y,
+            android.graphics.Color.rgb(x * 255 / 31, y * 255 / 31, 128),
+        )
+        file.outputStream().use { original.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        original.recycle()
+        val photo = NativePhoto("warp", "liquify.png", file.name, 32, 32)
+        photo.checkpoint()
+        val grid = NativeLiquify(null)
+        val started = System.nanoTime()
+        grid.push(.35 to .3, .45 to .4, .2, .5, 32, 32)
+        android.util.Log.i("HinanaLiquify", "brush ms=" + (System.nanoTime() - started) / 1e6)
+        assertArrayEquals(grid.data, NativeLiquify(grid.json()).data, 0f)
+        assertEquals(129 * 129 * 2, grid.data.size)
+        photo.settings.put("liquify", grid.json())
+        photo.checkpoint()
+        val output = NativeExport.export(context, library, photo, "png16", "srgb", 0, 95, false)
+        val decoded = BitmapFactory.decodeFile(output.path)
+        val pixel = decoded.getPixel(14, 12)
+        assertTrue(
+            "Horizontal push changes source sampling",
+            android.graphics.Color.red(pixel) < 14 * 255 / 31 - 3,
+        )
+        assertTrue(
+            "Vertical push changes source sampling",
+            android.graphics.Color.green(pixel) < 12 * 255 / 31 - 3,
+        )
+        assertEquals(128.0, android.graphics.Color.blue(pixel).toDouble(), 2.0)
+        decoded.recycle()
+        val neutral = NativePhoto.unarchive(photo.history.first())
+        assertTrue(neutral.isNull("liquify"))
+        assertEquals(
+            grid.json().getString("data"),
+            NativePhoto.unarchive(photo.history.last()).getJSONObject("liquify").getString("data"),
+        )
+        library.work.shutdown()
+    }
+
+    @Test
     fun gpuMatchesDesktopReference() = gpu {
         val cases =
             JSONArray(

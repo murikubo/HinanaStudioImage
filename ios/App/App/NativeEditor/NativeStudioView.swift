@@ -9,6 +9,8 @@ struct NativeStudioView: View {
   @ObservedObject var library: NativeLibrary
   @State private var section = "편집"
   @State private var panel = "편집"
+  @State private var liquifyRadius = 0.1
+  @State private var liquifyStrength = 0.5
   @State private var query = ""
   @State private var stars = false
   @State private var sourceMenu = false
@@ -212,6 +214,17 @@ struct NativeStudioView: View {
       }.padding(.horizontal, 12).padding(.vertical, 6)
       NativeCanvas(
         library: library, compare: compare, proofSDR: proof, maskID: panel == "마스크" ? maskID : "",
+        liquify: panel == "리퀴파이", brushRadius: liquifyRadius, brushStrength: liquifyStrength,
+        onLiquify: { value, commit in
+          guard let photo = library.current else { return }
+          library.objectWillChange.send()
+          if photo.history.isEmpty { photo.checkpoint() }
+          photo.settings.values["liquify"] = value ?? NSNull()
+          if commit {
+            photo.checkpoint()
+            library.persist()
+          }
+        },
         maskTool: maskTool, overlay: overlay, zoomRequest: zoomRequest, zoomRevision: zoomRevision,
         onZoom: { zoomLabel = $0 }, onHistogram: { histogram = $0 }, onPoints: maskPoints)
       HStack(spacing: 1) {
@@ -399,8 +412,11 @@ struct NativeStudioView: View {
           ForEach(
             Array(
               zip(
-                ["편집", "색상·톤", "마스크", "정보"],
-                ["slider.horizontal.3", "paintpalette", "circle.inset.filled", "camera"])), id: \.0
+                ["편집", "색상·톤", "리퀴파이", "마스크", "정보"],
+                [
+                  "slider.horizontal.3", "paintpalette", "hand.draw", "circle.inset.filled",
+                  "camera",
+                ])), id: \.0
           ) { title, icon in
             Button {
               panel = title
@@ -455,6 +471,15 @@ struct NativeStudioView: View {
               slider("채도", "mixer_\(band)_saturation")
               slider("명도", "mixer_\(band)_luminance")
             }
+          } else if panel == "리퀴파이" {
+            Text("리퀴파이 · 밀기").bold()
+            Text("사진 위를 한 손가락으로 밀어 변형하세요. 두 손가락으로 확대·이동하고, 실행 취소로 한 획씩 되돌릴 수 있습니다.").font(.caption)
+              .foregroundStyle(.secondary)
+            Text("브러시 크기 · \(Int(liquifyRadius*100))%")
+            StudioSlider(value: $liquifyRadius, in: 0.05...0.3, onEditingChanged: { _ in })
+            Text("강도 · \(Int(liquifyStrength*100))%")
+            StudioSlider(value: $liquifyStrength, in: 0.1...1, onEditingChanged: { _ in })
+            Button("변형만 초기화") { library.edit { $0.values["liquify"] = NSNull() } }
           } else if panel == "마스크" {
             maskControls
           } else if panel == "정보" {
@@ -676,10 +701,12 @@ struct NativeStudioView: View {
   private func applyPreset(_ name: String) {
     library.edit { a in
       let masks = a.masks
+      let liquify = a.values["liquify"]
       let color = a.string("colorSpace")
       let hdr = a.string("dynamicRange")
       a = NativeSettings()
       a.masks = masks
+      a.values["liquify"] = liquify ?? NSNull()
       a.values["colorSpace"] = color
       a.values["dynamicRange"] = hdr
       a.values["precision"] = "float"

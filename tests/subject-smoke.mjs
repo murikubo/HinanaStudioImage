@@ -86,7 +86,7 @@ try {
   await click(0.64, 0.6);
   console.log('First recognition ms:', Date.now() - start);
   let project = await save();
-  assert.equal(project.version, 5);
+  assert.equal(project.version, 6);
   assert.deepEqual(
     project.photos[0].history,
     [],

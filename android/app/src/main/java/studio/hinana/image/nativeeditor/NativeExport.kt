@@ -15,38 +15,45 @@ import java.util.zip.DeflaterOutputStream
 import kotlin.math.*
 
 object NativeExport {
-    fun isPQ(file: File): Boolean = runCatching {
-        file.inputStream().use { raw ->
-            val input = DataInputStream(BufferedInputStream(raw))
-            val signature = ByteArray(8)
-            input.readFully(signature)
-            if (!signature.contentEquals(byteArrayOf(137.toByte(), 80, 78, 71, 13, 10, 26, 10)))
-                return@use false
-            while (true) {
-                val length = input.readInt()
-                require(length >= 0 && length <= 256 * 1024 * 1024)
-                val type = ByteArray(4)
-                input.readFully(type)
-                val name = String(type, Charsets.US_ASCII)
-                if (name == "cICP") {
-                    val data = ByteArray(length)
-                    input.readFully(data)
-                    return@use data.size == 4 && data[0].toInt() == 9 && data[1].toInt() == 16
-                }
-                if (name == "IDAT" || name == "IEND") return@use false
-                var skip = length.toLong() + 4
-                while (skip > 0) {
-                    val n = input.skip(skip)
-                    if (n == 0L) {
-                        input.readByte()
-                        skip--
-                    } else skip -= n
+    fun isPQ(file: File): Boolean =
+        runCatching {
+                file.inputStream().use { raw ->
+                    val input = DataInputStream(BufferedInputStream(raw))
+                    val signature = ByteArray(8)
+                    input.readFully(signature)
+                    if (
+                        !signature.contentEquals(
+                            byteArrayOf(137.toByte(), 80, 78, 71, 13, 10, 26, 10)
+                        )
+                    )
+                        return@use false
+                    while (true) {
+                        val length = input.readInt()
+                        require(length >= 0 && length <= 256 * 1024 * 1024)
+                        val type = ByteArray(4)
+                        input.readFully(type)
+                        val name = String(type, Charsets.US_ASCII)
+                        if (name == "cICP") {
+                            val data = ByteArray(length)
+                            input.readFully(data)
+                            return@use data.size == 4 &&
+                                data[0].toInt() == 9 &&
+                                data[1].toInt() == 16
+                        }
+                        if (name == "IDAT" || name == "IEND") return@use false
+                        var skip = length.toLong() + 4
+                        while (skip > 0) {
+                            val n = input.skip(skip)
+                            if (n == 0L) {
+                                input.readByte()
+                                skip--
+                            } else skip -= n
+                        }
+                    }
+                    false
                 }
             }
-            false
-        }
-    }
-        .getOrDefault(false)
+            .getOrDefault(false)
 
     fun isHDR(file: File): Boolean {
         if (isPQ(file)) return true
@@ -378,11 +385,18 @@ object NativeExport {
                 val dy = (y - .5) * d.second
                 (p.width / 2.0 + c * dx + s * dy) to (p.height / 2.0 - s * dx + c * dy)
             }
+        val grid = NativeLiquify(p.settings.optJSONObject("liquify"))
+        var mx = 24
+        var my = 24
+        for (i in grid.data.indices step 2) {
+            mx = max(mx, 24 + ceil(abs(grid.data[i]) * p.width).toInt())
+            my = max(my, 24 + ceil(abs(grid.data[i + 1]) * p.height).toInt())
+        }
         return Rect(
-            max(0, floor(corners.minOf { it.first }).toInt() - 24),
-            max(0, floor(corners.minOf { it.second }).toInt() - 24),
-            min(p.width, ceil(corners.maxOf { it.first }).toInt() + 24),
-            min(p.height, ceil(corners.maxOf { it.second }).toInt() + 24),
+            max(0, floor(corners.minOf { it.first }).toInt() - mx),
+            max(0, floor(corners.minOf { it.second }).toInt() - my),
+            min(p.width, ceil(corners.maxOf { it.first }).toInt() + mx),
+            min(p.height, ceil(corners.maxOf { it.second }).toInt() + my),
         )
     }
 

@@ -13,6 +13,8 @@ precision highp float;
 uniform sampler2D source;
 uniform sampler2D gainmap;
 uniform sampler2D coverage;
+uniform sampler2D warpMap;
+uniform float warpEnabled;
 uniform vec2 dimensions;
 uniform vec2 outputSize;
 uniform vec2 tileOrigin;
@@ -96,8 +98,13 @@ vec2 orientedCoordinate(vec2 p){
     p=vec2(cs*d.x+sn*d.y,-sn*d.x+cs*d.y)/dimensions+.5;
     return p;
 }
+vec2 displacement(vec2 p) {
+    vec2 g=clamp(p,0.0,1.0)*128.0;ivec2 i=ivec2(min(floor(g),vec2(127)));vec2 t=g-vec2(i);
+    return mix(mix(texelFetch(warpMap,i,0).rg,texelFetch(warpMap,i+ivec2(1,0),0).rg,t.x),mix(texelFetch(warpMap,i+ivec2(0,1),0).rg,texelFetch(warpMap,i+ivec2(1,1),0).rg,t.x),t.y);
+}
 vec2 rawCoordinate(vec2 p){
     p=orientedCoordinate(p);
+    if(warpEnabled>.5 && compare<.5)p=clamp(p+displacement(p),0.0,1.0);
     if(sourceOrientation==2.0)p.x=1.0-p.x;
     if(sourceOrientation==3.0)p=1.0-p;
     if(sourceOrientation==4.0)p.y=1.0-p.y;
