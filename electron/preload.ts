@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 contextBridge.exposeInMainWorld('hinana', {
   platform: process.platform,
+  decodeHDRSource(source: string) {
+    return ipcRenderer.invoke('image:hdr', source);
+  },
   takeProjectFile() {
     return ipcRenderer.invoke('project:take');
   },

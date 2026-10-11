@@ -578,6 +578,24 @@ function App() {
             const decoded = await window.hinana.decodeRaw(file);
             src = decoded.src;
             rawSource = decoded.original;
+          } else if (
+            window.hinana?.platform === 'darwin' &&
+            /\.(jpe?g|heic|heif)$/i.test(file.name)
+          ) {
+            const original = await readDataURL(file);
+            setBusy(`HDR 원본 확인 중 · ${file.name}`);
+            const decoded = await window.hinana.decodeHDRSource(original);
+            if (decoded.hdr && decoded.png) {
+              src = await nativeWorkingPNG({
+                png: decoded.png,
+                hdr: true,
+                peak: decoded.peak || 1,
+              });
+              nativePreview = decoded.preview
+                ? `data:image/jpeg;base64,${decoded.preview}`
+                : undefined;
+              nativePeak = (decoded.peak || 1) * 203;
+            } else src = original;
           } else src = await readDataURL(file);
           const image = await loadImage(src, nativePreview);
           if (image.naturalWidth * image.naturalHeight > 60_000_000) throw new Error();

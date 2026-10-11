@@ -9,6 +9,7 @@ const execute = promisify(execFile);
 const rawPattern = /\.(dng|cr2|cr3|nef|nrw|arw|srf|sr2|raf|orf|rw2|pef|rwl|3fr|fff|iiq|srw|raw)$/i;
 let decoding = false;
 export function registerRawDecoder() {
+  ipcMain.handle('image:hdr', (_event, source: unknown) => decodeHDRSource(source));
   ipcMain.handle('raw:decode', (_event, filePath: unknown) => decodeRaw(filePath));
   ipcMain.handle('raw:redevelop', async (_event, source: unknown, name: unknown) => {
     if (
@@ -100,4 +101,39 @@ function decodePortable(input: string, output: string): Promise<void> {
       if (!settled) finish(new Error(`RAW 디코더가 종료되었습니다 (${code}).`));
     });
   });
+}
+
+async function decodeHDRSource(source: unknown) {
+  if (process.platform !== 'darwin') return { hdr: false };
+  if (
+    typeof source !== 'string' ||
+    source.length > 112_000_000 ||
+    !/^data:image\/(?:jpeg|jpg|heic|heif);base64,[A-Za-z0-9+/]*={0,2}$/.test(source)
+  )
+    throw new Error('HDR 원본 데이터가 올바르지 않습니다.');
+  const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'hinana-hdr-'));
+  try {
+    const input = path.join(folder, 'source');
+    const output = path.join(folder, 'working.png');
+    const preview = path.join(folder, 'preview.jpg');
+    await fs.writeFile(input, Buffer.from(source.slice(source.indexOf(',') + 1), 'base64'));
+    const decoder = app.isPackaged
+      ? path.join(process.resourcesPath, 'hdr/hinana-hdr')
+      : path.join(app.getAppPath(), 'native/bin/hinana-hdr');
+    const result = await execute(decoder, [input, output, preview], {
+      timeout: 120_000,
+      maxBuffer: 65536,
+    });
+    const info = JSON.parse(result.stdout) as { hdr: boolean; peak?: number };
+    if (!info.hdr) return { hdr: false };
+    const [png, display] = await Promise.all([fs.readFile(output), fs.readFile(preview)]);
+    return {
+      hdr: true,
+      peak: info.peak,
+      png: png.toString('base64'),
+      preview: display.toString('base64'),
+    };
+  } finally {
+    await fs.rm(folder, { recursive: true, force: true });
+  }
 }

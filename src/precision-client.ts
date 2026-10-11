@@ -1,3 +1,4 @@
+import { nativeWorkingPNG } from './native-images';
 import { gpuHDRSupported, paintGPUHDR, prepareGPUHDR } from './hdr-gpu';
 import type { Adjustments } from './engine';
 import { colorContext, type WorkingColorSpace } from './color-space';
@@ -6,6 +7,7 @@ import { P3_SRGB, SRGB_P3, transform, encoded, sdrMap, SDR_WHITE } from './preci
 type Result = { frame: FloatFrame; png: Uint8Array; width: number; height: number };
 let worker: Worker | undefined,
   key = '',
+  keyNativeHDR = false,
   serial = 0,
   sourceSerial = 0;
 const pending = new Map<
@@ -43,7 +45,7 @@ export function precisionSourceInfo(src: string) {
   if (!src.startsWith('data:image/png')) return { depth: 8, hdr: false };
   return pngDataURLInfo(src);
 }
-function executePrecision(
+async function executePrecision(
   src: string,
   image: HTMLImageElement,
   a: Adjustments,
@@ -55,13 +57,27 @@ function executePrecision(
     id = ++serial;
   let source: { src?: string; data?: Uint8ClampedArray; width: number; height: number } | undefined;
   const transfers: Transferable[] = [];
-  if (key !== src) {
+  const nativeHDR =
+    window.hinana?.platform === 'darwin' &&
+    a.dynamicRange === 'hdr' &&
+    /^data:image\/(jpeg|jpg|heic|heif);/.test(src);
+  if (key !== src || nativeHDR !== keyNativeHDR) {
     const info = precisionSourceInfo(src);
     if (image.naturalWidth * image.naturalHeight > 32_000_000)
       return Promise.reject(new Error('고정밀 편집은 32MP 이하를 지원합니다.'));
     if (info.depth === 16 || info.hdr)
       source = { src, width: image.naturalWidth, height: image.naturalHeight };
-    else {
+    else if (nativeHDR) {
+      const decoded = await window.hinana!.decodeHDRSource(src);
+      if (decoded.hdr && decoded.png) {
+        source = {
+          src: await nativeWorkingPNG({ png: decoded.png, hdr: true, peak: decoded.peak || 1 }),
+          width: image.naturalWidth,
+          height: image.naturalHeight,
+        };
+      }
+    }
+    if (!source) {
       const c = document.createElement('canvas');
       c.width = image.naturalWidth;
       c.height = image.naturalHeight;
@@ -73,6 +89,7 @@ function executePrecision(
       c.width = c.height = 0;
     }
     key = src;
+    keyNativeHDR = nativeHDR;
     sourceSerial++;
   }
   // The key is a stable identifier, not another full copy of the original data URL.

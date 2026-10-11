@@ -12,6 +12,9 @@ interface Window {
     }): Promise<{ width: number; height: number; data: string }>;
     cancelSubject(): Promise<void>;
     redevelopRaw(source: string, name: string): Promise<{ src: string; original: string }>;
+    decodeHDRSource(
+      source: string,
+    ): Promise<{ hdr: boolean; peak?: number; png?: string; preview?: string }>;
     decodeRaw(file: File): Promise<{ src: string; original: string }>;
     onMenuAction(
       callback: (action: 'undo' | 'redo' | 'about' | 'project-open' | 'project-save') => void,

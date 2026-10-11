@@ -19,4 +19,20 @@ const result = spawnSync(
   { stdio: 'inherit' },
 );
 if (result.error) console.error(result.error.message);
-process.exit(result.status ?? 1);
+if (result.status !== 0) process.exit(result.status ?? 1);
+const hdr = spawnSync(
+  'xcrun',
+  [
+    'swiftc',
+    '-O',
+    '-target',
+    `${process.arch === 'arm64' ? 'arm64' : 'x86_64'}-apple-macosx12.0`,
+    'native/HDRDecoder.swift',
+    'ios/App/App/NativeImageDecoder.swift',
+    '-o',
+    'native/bin/hinana-hdr',
+  ],
+  { stdio: 'inherit' },
+);
+if (hdr.error) console.error(hdr.error.message);
+process.exit(hdr.status ?? 1);

@@ -285,3 +285,7 @@ GitHub Actions의 `Native mobile apps` 워크플로는 Android 에뮬레이터 �
 iOS WebP 인코딩은 BSD 라이선스의 libwebp 1.6.0을 사용하며 Swift Package Manager로 고정된 버전을 받습니다. 라이선스는 앱 번들의 `NativeThirdPartyNotices.txt`와 저장소에 포함됩니다. 사용자 사진은 외부 서버로 전송하지 않습니다.
 
 버전 갱신은 `npm version patch --no-git-tag-version`(기능 릴리스는 `minor`)으로 수행합니다. 훅이 Android/iOS 버전 및 빌드 번호를 동기화합니다.
+
+## macOS 0.14.6 HDR 게인맵 원본 읽기
+
+macOS 14 이상에서 HDR 게인맵이 있는 JPEG/HEIF를 Core Image로 확장해 16비트 PQ 작업 이미지로 가져옵니다. 8비트 브라우저 캔버스를 거치지 않아 원본 HDR 하이라이트가 유지됩니다. HDR 원본은 자동으로 HDR 편집 모드를 선택합니다. 기존 프로젝트의 JPEG 원본도 32비트 HDR 편집·내보내기에서 게인맵을 읽으며, 이전 SDR 모드의 처리는 유지합니다. 이미 SDR로 내보낸 파일에서는 게인맵을 복원할 수 없습니다. 이 변경은 macOS 읽기 경로에만 적용됩니다.
