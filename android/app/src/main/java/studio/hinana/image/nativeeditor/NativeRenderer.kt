@@ -2,7 +2,6 @@ package studio.hinana.image.nativeeditor
 
 import android.graphics.*
 import android.opengl.GLES30 as GL
-import android.opengl.GLUtils
 import android.os.Build
 import java.io.File
 import java.nio.ByteBuffer
@@ -76,25 +75,7 @@ class NativeRenderer {
         bitmapWidth = bitmap.width
         bitmapHeight = bitmap.height
         bind(0)
-        if (Build.VERSION.SDK_INT >= 26 && bitmap.config == Bitmap.Config.RGBA_F16) {
-            val buffer =
-                ByteBuffer.allocateDirect(bitmap.allocationByteCount).order(ByteOrder.nativeOrder())
-            bitmap.copyPixelsToBuffer(buffer)
-            buffer.position(0)
-            GL.glPixelStorei(GL.GL_UNPACK_ROW_LENGTH, bitmap.rowBytes / 8)
-            GL.glTexImage2D(
-                GL.GL_TEXTURE_2D,
-                0,
-                GL.GL_RGBA16F,
-                bitmap.width,
-                bitmap.height,
-                0,
-                GL.GL_RGBA,
-                GL.GL_HALF_FLOAT,
-                buffer,
-            )
-            GL.glPixelStorei(GL.GL_UNPACK_ROW_LENGTH, 0)
-        } else GLUtils.texImage2D(GL.GL_TEXTURE_2D, 0, bitmap, 0)
+        uploadBitmap(bitmap)
         GL.glUseProgram(program)
         one("gainEnabled", 0.0)
         one("gainP3", if (photo?.settings?.optBoolean("sourceGainP3") == true) 1.0 else 0.0)
@@ -117,7 +98,7 @@ class NativeRenderer {
                 }
             }
             bind(1)
-            GLUtils.texImage2D(GL.GL_TEXTURE_2D, 0, gain.gainmapContents, 0)
+            uploadBitmap(gain.gainmapContents)
             one("gainEnabled", 1.0)
             fun array(name: String, v: FloatArray) {
                 GL.glUniform3fv(uniform(name), 1, v, 0)
@@ -127,6 +108,81 @@ class NativeRenderer {
             array("gainGamma", gain.gamma)
             array("epsilonSdr", gain.epsilonSdr)
             array("epsilonHdr", gain.epsilonHdr)
+        }
+    }
+
+    /**
+     * ImageDecoder gainmaps can have tightly packed ALPHA_8 rows of odd width. GLUtils assumes the
+     * current unpack alignment, which can read past that allocation. Upload explicit sized ES3
+     * formats with the bitmap's actual stride instead.
+     */
+    private fun uploadBitmap(bitmap: Bitmap) {
+        val config = bitmap.config
+        if (
+            config != Bitmap.Config.ALPHA_8 &&
+                config != Bitmap.Config.ARGB_8888 &&
+                config != Bitmap.Config.RGB_565 &&
+                !(Build.VERSION.SDK_INT >= 26 && config == Bitmap.Config.RGBA_F16)
+        ) {
+            val converted = checkNotNull(bitmap.copy(Bitmap.Config.ARGB_8888, false))
+            try {
+                uploadBitmap(converted)
+            } finally {
+                converted.recycle()
+            }
+            return
+        }
+        val bytes =
+            when (config) {
+                Bitmap.Config.ALPHA_8 -> 1
+                Bitmap.Config.RGB_565 -> 2
+                else ->
+                    if (Build.VERSION.SDK_INT >= 26 && config == Bitmap.Config.RGBA_F16) 8 else 4
+            }
+        val buffer =
+            ByteBuffer.allocateDirect(bitmap.rowBytes * bitmap.height)
+                .order(ByteOrder.nativeOrder())
+        bitmap.copyPixelsToBuffer(buffer)
+        buffer.position(0)
+        val monochrome = config == Bitmap.Config.ALPHA_8
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_SWIZZLE_R, GL.GL_RED)
+        GL.glTexParameteri(
+            GL.GL_TEXTURE_2D,
+            GL.GL_TEXTURE_SWIZZLE_G,
+            if (monochrome) GL.GL_RED else GL.GL_GREEN,
+        )
+        GL.glTexParameteri(
+            GL.GL_TEXTURE_2D,
+            GL.GL_TEXTURE_SWIZZLE_B,
+            if (monochrome) GL.GL_RED else GL.GL_BLUE,
+        )
+        GL.glTexParameteri(
+            GL.GL_TEXTURE_2D,
+            GL.GL_TEXTURE_SWIZZLE_A,
+            if (monochrome) GL.GL_ONE else GL.GL_ALPHA,
+        )
+        GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
+        GL.glPixelStorei(GL.GL_UNPACK_ROW_LENGTH, bitmap.rowBytes / bytes)
+        try {
+            GL.glTexImage2D(
+                GL.GL_TEXTURE_2D,
+                0,
+                when (config) {
+                    Bitmap.Config.ALPHA_8 -> GL.GL_R8
+                    Bitmap.Config.RGB_565 -> GL.GL_RGB565
+                    else -> if (bytes == 8) GL.GL_RGBA16F else GL.GL_RGBA8
+                },
+                bitmap.width,
+                bitmap.height,
+                0,
+                if (monochrome) GL.GL_RED else if (bytes == 2) GL.GL_RGB else GL.GL_RGBA,
+                if (bytes == 8) GL.GL_HALF_FLOAT
+                else if (bytes == 2) GL.GL_UNSIGNED_SHORT_5_6_5 else GL.GL_UNSIGNED_BYTE,
+                buffer,
+            )
+        } finally {
+            GL.glPixelStorei(GL.GL_UNPACK_ROW_LENGTH, 0)
+            GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
         }
     }
 

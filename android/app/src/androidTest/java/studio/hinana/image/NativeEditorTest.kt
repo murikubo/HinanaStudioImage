@@ -99,6 +99,58 @@ class NativeEditorTest {
     }
 
     @Test
+    fun oddWidthMonochromeGainmapUpload() = gpu {
+        if (android.os.Build.VERSION.SDK_INT < 34) return@gpu
+        val base = Bitmap.createBitmap(13, 17, Bitmap.Config.ARGB_8888)
+        val map = Bitmap.createBitmap(431, 575, Bitmap.Config.ALPHA_8)
+        val pixels = ByteBuffer.allocate(map.rowBytes * map.height)
+        for (y in 0 until map.height) for (x in 0 until map.rowBytes) pixels.put(
+            ((x + y * 7) % 256).toByte()
+        )
+        pixels.rewind()
+        map.copyPixelsFromBuffer(pixels)
+        base.gainmap = android.graphics.Gainmap(map)
+        val renderer = NativeRenderer()
+        renderer.init()
+        val fbo = IntArray(1)
+        try {
+            renderer.upload(base)
+            assertEquals(GL.GL_NO_ERROR, GL.glGetError())
+            val texture = IntArray(1)
+            GL.glGetIntegerv(GL.GL_TEXTURE_BINDING_2D, texture, 0)
+            GL.glGenFramebuffers(1, fbo, 0)
+            GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, fbo[0])
+            GL.glFramebufferTexture2D(
+                GL.GL_FRAMEBUFFER,
+                GL.GL_COLOR_ATTACHMENT0,
+                GL.GL_TEXTURE_2D,
+                texture[0],
+                0,
+            )
+            assertEquals(GL.GL_FRAMEBUFFER_COMPLETE, GL.glCheckFramebufferStatus(GL.GL_FRAMEBUFFER))
+            val result = ByteBuffer.allocateDirect(map.width * map.height * 4)
+            GL.glReadPixels(0, 0, map.width, map.height, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, result)
+            for (y in listOf(0, 1, 287, 574)) for (x in listOf(0, 1, 430)) assertEquals(
+                "gainmap row $y column $x",
+                (x + y * 7) % 256,
+                result[(y * map.width + x) * 4].toInt() and 255,
+            )
+            val state = IntArray(1)
+            GL.glGetIntegerv(GL.GL_UNPACK_ALIGNMENT, state, 0)
+            assertEquals(4, state[0])
+            GL.glGetIntegerv(GL.GL_UNPACK_ROW_LENGTH, state, 0)
+            assertEquals(0, state[0])
+            assertEquals(GL.GL_NO_ERROR, GL.glGetError())
+        } finally {
+            GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, 0)
+            GL.glDeleteFramebuffers(1, fbo, 0)
+            renderer.destroy()
+            base.recycle()
+            map.recycle()
+        }
+    }
+
+    @Test
     fun liquifyGridGpuExportAndUndo() {
         val library = isolated()
         val file = File(library.root, "liquify.png")
