@@ -113,6 +113,8 @@ object NativeExport {
         quality: Int,
         preserve: Boolean,
     ): File {
+        val hdrJpeg = format == "hdr-jpeg"
+        require(!hdrJpeg || Build.VERSION.SDK_INT >= 34) { "HDR JPEG는 Android 14 이상에서 지원합니다." }
         val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
         val version = IntArray(2)
         check(EGL14.eglInitialize(display, version, 0, version, 1))
@@ -164,7 +166,8 @@ object NativeExport {
         renderer.init()
         renderer.photo = photo
         renderer.settings = org.json.JSONObject(photo.settings.toString())
-        renderer.proof = photo.settings.optString("dynamicRange") == "hdr" && format != "hdr-png"
+        renderer.proof =
+            photo.settings.optString("dynamicRange") == "hdr" && format != "hdr-png" && !hdrJpeg
         val dimensions = renderer.dimensions()
         val scale =
             if (maxSide > 0) min(1.0, maxSide / max(dimensions.first, dimensions.second)) else 1.0
@@ -177,6 +180,10 @@ object NativeExport {
         val limit = IntArray(1)
         GL.glGetIntegerv(GL.GL_MAX_TEXTURE_SIZE, limit, 0)
         require(width <= limit[0]) { "출력 폭이 GPU 제한을 넘습니다. 이미지 크기를 줄여 주세요." }
+        val hdrEncoder =
+            if (hdrJpeg) NativeHDRJpeg(width, height, photo.settings.optDouble("hdrPeak", 1000.0))
+            else null
+        var gainmap: Bitmap? = null
         var bitmap: Bitmap? = null
         try {
             if (!format.contains("png")) {
@@ -302,6 +309,8 @@ object NativeExport {
                             }
                         }
                         output.row(bytes)
+                    } else if (hdrEncoder != null) {
+                        hdrEncoder.row(floats, row, y + rows - 1 - row, bitmap!!)
                     } else {
                         val colors = IntArray(width)
                         for (x in 0 until width) {
@@ -326,6 +335,15 @@ object NativeExport {
             }
             output?.close()
             if (bitmap != null) {
+                if (hdrEncoder != null) {
+                    bitmap!!.setColorSpace(
+                        ColorSpace.get(
+                            if (space == "display-p3") ColorSpace.Named.DISPLAY_P3
+                            else ColorSpace.Named.SRGB
+                        )
+                    )
+                    gainmap = hdrEncoder.attach(bitmap!!)
+                }
                 target.outputStream().use { stream ->
                     check(
                         bitmap!!.compress(
@@ -339,7 +357,7 @@ object NativeExport {
                     )
                 }
             }
-            if (!format.contains("png"))
+            if (!format.contains("png") && !hdrJpeg)
                 NativeColorTags.embed(
                     target,
                     context.assets
@@ -352,9 +370,18 @@ object NativeExport {
                     height,
                 )
             if (preserve) copyExif(original, target, width, height)
+            if (hdrJpeg) {
+                val verify = NativeRenderer.decode(target, 64)
+                try {
+                    check(verify.hasGainmap()) { "HDR JPEG 밝기 정보를 저장하지 못했습니다." }
+                } finally {
+                    verify.recycle()
+                }
+            }
             return target
         } finally {
             bitmap?.recycle()
+            gainmap?.recycle()
             renderer.destroy()
             EGL14.eglMakeCurrent(
                 display,

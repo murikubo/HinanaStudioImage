@@ -1499,9 +1499,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun exportDialog() {
         val p = library.current ?: return
-        val formats = listOf("JPEG", "PNG · 8비트", "PNG · 16비트", "PNG · 16비트 HDR PQ", "WebP")
-        val keys = listOf("jpeg", "png", "png16", "hdr-png", "webp")
-        var format = "jpeg"
+        val formats =
+            mutableListOf(
+                "JPEG · SDR",
+                "PNG · 8비트 SDR",
+                "PNG · 16비트 SDR",
+                "PNG · 16비트 HDR PQ",
+                "WebP · SDR",
+            )
+        val keys = mutableListOf("jpeg", "png", "png16", "hdr-png", "webp")
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            formats.add(0, "JPEG · HDR (Ultra HDR)")
+            keys.add(0, "hdr-jpeg")
+        }
+        var format =
+            if (p.settings.optString("dynamicRange") == "hdr") {
+                if (android.os.Build.VERSION.SDK_INT >= 34) "hdr-jpeg" else "hdr-png"
+            } else "jpeg"
         var space = if (p.settings.optString("colorSpace") == "display-p3") "display-p3" else "srgb"
         var size = 0
         var quality = 95
@@ -1543,7 +1557,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         formatButton =
-            addField("파일 형식", "JPEG") {
+            addField("파일 형식", formats[keys.indexOf(format)]) {
                 choices("파일 형식", formats) { value ->
                     format = keys[formats.indexOf(value)]
                     formatButton.text = "$value  ⌄"
@@ -1552,7 +1566,9 @@ class MainActivity : AppCompatActivity() {
                         else if (space == "display-p3") "Display P3  ⌄" else "sRGB  ⌄"
                     spaceButton.isEnabled = format != "hdr-png"
                     qualityButton.visibility =
-                        if (format == "jpeg" || format == "webp") View.VISIBLE else View.GONE
+                        if (format == "jpeg" || format == "hdr-jpeg" || format == "webp")
+                            View.VISIBLE
+                        else View.GONE
                     (qualityButton.tag as? View)?.visibility = qualityButton.visibility
                 }
             }
@@ -1579,6 +1595,10 @@ class MainActivity : AppCompatActivity() {
                     qualityButton.text = "$value%  ⌄"
                 }
             }
+        spaceButton.text = if (format == "hdr-png") "Rec.2020 / PQ · HDR" else spaceButton.text
+        spaceButton.isEnabled = format != "hdr-png"
+        qualityButton.visibility = if (format.contains("png")) View.GONE else View.VISIBLE
+        (qualityButton.tag as? View)?.visibility = qualityButton.visibility
         val preserve =
             CheckBox(this).also {
                 it.text = "EXIF 메타데이터 보존"

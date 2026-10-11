@@ -99,6 +99,73 @@ class NativeEditorTest {
     }
 
     @Test
+    fun editedHdrJpegKeepsHighlightsExifAndGalleryBytes() {
+        if (android.os.Build.VERSION.SDK_INT < 34) return
+        val library = isolated()
+        try {
+            val source = File(library.root, "hdr-jpeg-source.png")
+            val base = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888)
+            base.eraseColor(0xffcccccc.toInt())
+            source.outputStream().use { base.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            base.recycle()
+            ExifInterface(source).also {
+                it.setAttribute(ExifInterface.TAG_MODEL, "HDR test camera")
+                it.saveAttributes()
+            }
+            val edited = NativePhoto("hdr-jpeg-test", "hdr-jpeg-source.png", source.name, 32, 32)
+            edited.settings.put("dynamicRange", "hdr").put("exposure", 2.0)
+            for (space in listOf("srgb", "display-p3")) {
+                val exported =
+                    NativeExport.export(context, library, edited, "hdr-jpeg", space, 0, 95, true)
+                val decoded = NativeRenderer.decode(exported, 32)
+                assertTrue("Edited HDR JPEG contains gainmap", decoded.hasGainmap())
+                assertTrue(decoded.gainmap!!.ratioMax.maxOrNull()!! > 2f)
+                decoded.recycle()
+                assertEquals(
+                    "HDR test camera",
+                    ExifInterface(exported).getAttribute(ExifInterface.TAG_MODEL),
+                )
+                val uri = NativeGallery.save(context, exported)
+                try {
+                    context.contentResolver.openInputStream(uri)!!.use {
+                        assertArrayEquals(exported.readBytes(), it.readBytes())
+                    }
+                } finally {
+                    context.contentResolver.delete(uri, null, null)
+                }
+                val copy = File(library.root, "hdr-copy-$space.jpg")
+                exported.copyTo(copy, overwrite = true)
+                val imported = NativePhoto("roundtrip", copy.name, copy.name, 32, 32)
+                imported.settings
+                    .put("dynamicRange", "hdr")
+                    .put("sourceGainP3", space == "display-p3")
+                val output =
+                    NativeExport.export(context, library, imported, "hdr-png", "srgb", 0, 95, false)
+                val hdr = NativeRenderer.decode(output, 32)
+                try {
+                    val components = hdr.getColor(16, 16).components
+                    assertEquals(
+                        "HDR JPEG reconstructs edited highlight brightness",
+                        1.055 * 2.4153.pow(1 / 2.4) - .055,
+                        components[0].toDouble(),
+                        .05,
+                    )
+                    assertEquals(components[0].toDouble(), components[1].toDouble(), .02)
+                    assertEquals(components[1].toDouble(), components[2].toDouble(), .02)
+                } finally {
+                    hdr.recycle()
+                }
+            }
+            val sdr = NativeExport.export(context, library, edited, "jpeg", "srgb", 0, 95, false)
+            val decoded = NativeRenderer.decode(sdr, 32)
+            assertFalse("Explicit SDR JPEG remains available", decoded.hasGainmap())
+            decoded.recycle()
+        } finally {
+            library.work.shutdown()
+        }
+    }
+
+    @Test
     fun hdrPreviewRetainsGainmapHighlightsAndSdrSwitch() = gpu {
         if (android.os.Build.VERSION.SDK_INT < 34) return@gpu
         val base = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
