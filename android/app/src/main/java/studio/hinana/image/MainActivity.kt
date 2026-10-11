@@ -48,6 +48,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         setTheme(R.style.AppTheme_NoActionBar)
+        if (android.os.Build.VERSION.SDK_INT >= 26)
+            window.colorMode = android.content.pm.ActivityInfo.COLOR_MODE_HDR
         library = NativeLibrary(this)
         library.onError = { alert(it) }
         migrating = !library.manifest.exists()
@@ -592,6 +594,7 @@ class MainActivity : AppCompatActivity() {
         }
         preview.addView(photoHeading)
         canvas = NativeCanvas(this)
+        canvas.onHDRChanged = { if (selectedPanel == "편집" && !libraryVisible) showControls() }
         canvas.error = { alert(it) }
         canvas.onStroke = { maskStroke(it) }
         canvas.onLiquify = { value, commit ->
@@ -945,10 +948,14 @@ class MainActivity : AppCompatActivity() {
                     }
                     slider("HDR 밝은 영역 확장", "hdrHighlights", 0.0, 100.0)
                     controls.addView(
-                        text("현재 화면은 SDR 변환 미리보기입니다. HDR 데이터와 16비트 출력은 유지됩니다.").also {
-                            it.textSize = 10f
-                            it.setTextColor(muted)
-                        }
+                        text(
+                                if (canvas.hdrDisplayActive) "HDR 미리보기 · 10비트 Rec.2020 / PQ"
+                                else "현재 기기는 SDR 변환 미리보기입니다. HDR 데이터와 출력은 유지됩니다."
+                            )
+                            .also {
+                                it.textSize = 10f
+                                it.setTextColor(muted)
+                            }
                     )
                 }
                 selectionRow(

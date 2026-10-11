@@ -13,6 +13,24 @@ import org.json.JSONObject
 
 class NativeCanvas(context: Context) : GLSurfaceView(context), GLSurfaceView.Renderer {
     val engine = NativeRenderer()
+    var onHDRChanged: (() -> Unit)? = null
+    private val hdrSurface =
+        NativeHDRSurface(
+            Build.VERSION.SDK_INT >= 26 &&
+                (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager)
+                    .defaultDisplay
+                    .hdrCapabilities
+                    .supportedHdrTypes
+                    .contains(Display.HdrCapabilities.HDR_TYPE_HDR10)
+        ) {
+            post {
+                onHDRChanged?.invoke()
+                requestRender()
+            }
+        }
+    val hdrDisplayActive: Boolean
+        get() = hdrSurface.active
+
     private var file = ""
     private var library: NativeLibrary? = null
     private var tileOrigin = 0.0 to 0.0
@@ -93,7 +111,8 @@ class NativeCanvas(context: Context) : GLSurfaceView(context), GLSurfaceView.Ren
 
     init {
         setEGLContextClientVersion(3)
-        setEGLConfigChooser(8, 8, 8, 8, 0, 0)
+        setEGLConfigChooser(hdrSurface)
+        setEGLWindowSurfaceFactory(hdrSurface)
         setRenderer(this)
         renderMode = RENDERMODE_WHEN_DIRTY
         preserveEGLContextOnPause = true
@@ -362,6 +381,7 @@ class NativeCanvas(context: Context) : GLSurfaceView(context), GLSurfaceView.Ren
             val w = d.first * s
             val h = d.second * s
             engine.overlayID = if (showOverlay) selectedMask else ""
+            engine.proof = !hdrSurface.active
             engine.draw(
                 width,
                 height,
@@ -373,6 +393,7 @@ class NativeCanvas(context: Context) : GLSurfaceView(context), GLSurfaceView.Ren
                 ),
                 tileOrigin,
                 tileSize,
+                mode = if (hdrSurface.active) 3 else 0,
             )
         } catch (e: Exception) {
             post { error?.invoke(e.message ?: "렌더링 오류") }

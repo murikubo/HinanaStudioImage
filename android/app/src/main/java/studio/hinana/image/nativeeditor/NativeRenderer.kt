@@ -396,6 +396,7 @@ class NativeRenderer {
         val oldWidth = bitmapWidth
         val oldHeight = bitmapHeight
         val oldOverlay = overlayID
+        val oldProof = proof
         val names =
             listOf(
                 "gainEnabled",
@@ -425,6 +426,7 @@ class NativeRenderer {
         swap()
         try {
             upload(bitmap)
+            proof = true
             overlayID = ""
             GL.glGenTextures(1, target, 0)
             GL.glBindTexture(GL.GL_TEXTURE_2D, target[0])
@@ -461,6 +463,7 @@ class NativeRenderer {
             bitmapWidth = oldWidth
             bitmapHeight = oldHeight
             overlayID = oldOverlay
+            proof = oldProof
             GL.glUseProgram(program)
             gain.forEach { (name, values) ->
                 if (values.size == 1) one(name, values[0].toDouble())

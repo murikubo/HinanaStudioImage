@@ -116,7 +116,7 @@ vec2 rawCoordinate(vec2 p){
 }
 void main(){
     vec2 screen=vec2(uv.x,1.0-uv.y),coord=(screen-viewport.xy)/viewport.zw;
-    if(any(lessThan(coord,vec2(0)))||any(greaterThan(coord,vec2(1)))){pixel=vec4(.07,.08,.085,1);return;}
+    if(any(lessThan(coord,vec2(0)))||any(greaterThan(coord,vec2(1)))){vec3 bg=vec3(.07,.08,.085); if(exportMode>1.5){bg=dec3(bg);bg=vec3(pq(bg.r),pq(bg.g),pq(bg.b));}pixel=vec4(bg,1);return;}
     vec2 world=rawCoordinate(coord),p=(world-tileOrigin)/tileSize;
     vec4 s=sampleSource(p);vec3 c=s.rgb;
     if(compare<.5){
@@ -148,6 +148,7 @@ void main(){
     if(proof>.5 && hdr>.5){peak=max(c.r,max(c.g,c.b));float mapped=peak<=.5?peak:.5+.5*(1.0-exp(-2.0*(peak-.5)));if(peak>0.0)c*=mapped/peak;}
     if(p3>.5 && (outputP3<.5 || exportMode>1.5))c=toSrgb(c);
     if(p3<.5 && outputP3>.5 && exportMode<1.5)c=toP3(c);
+    if(exportMode>2.5 && hdr<.5)c=clamp(c,0.0,1.0);
     if(exportMode>1.5){c=mat3(.627404,.069097,.016391,.329283,.919541,.088013,.043313,.011362,.895595)*c;c=clamp(c,vec3(0),vec3(hdrPeak/203.0));c=vec3(pq(c.r),pq(c.g),pq(c.b));}
     else if(exportMode<.5)c=enc3(c);
     pixel=vec4(c,s.a);

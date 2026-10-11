@@ -99,6 +99,91 @@ class NativeEditorTest {
     }
 
     @Test
+    fun hdrPreviewRetainsGainmapHighlightsAndSdrSwitch() = gpu {
+        if (android.os.Build.VERSION.SDK_INT < 34) return@gpu
+        val base = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        base.eraseColor(0xffcccccc.toInt())
+        val map = Bitmap.createBitmap(1, 1, Bitmap.Config.ALPHA_8)
+        map.eraseColor(0xffffffff.toInt())
+        base.gainmap =
+            android.graphics.Gainmap(map).also {
+                it.setRatioMin(4f, 4f, 4f)
+                it.setRatioMax(4f, 4f, 4f)
+                it.setEpsilonSdr(0f, 0f, 0f)
+                it.setEpsilonHdr(0f, 0f, 0f)
+            }
+        val renderer = NativeRenderer()
+        renderer.init()
+        renderer.photo = NativePhoto("hdr-test", "test.jpg", "test.jpg", 1, 1)
+        renderer.settings = NativePhoto.defaults().put("dynamicRange", "hdr")
+        renderer.proof = false
+        renderer.upload(base)
+        val texture = IntArray(1)
+        val fbo = IntArray(1)
+        GL.glGenTextures(1, texture, 0)
+        GL.glActiveTexture(GL.GL_TEXTURE3)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, texture[0])
+        GL.glTexImage2D(
+            GL.GL_TEXTURE_2D,
+            0,
+            GL.GL_RGBA8,
+            1,
+            1,
+            0,
+            GL.GL_RGBA,
+            GL.GL_UNSIGNED_BYTE,
+            null,
+        )
+        GL.glGenFramebuffers(1, fbo, 0)
+        GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, fbo[0])
+        GL.glFramebufferTexture2D(
+            GL.GL_FRAMEBUFFER,
+            GL.GL_COLOR_ATTACHMENT0,
+            GL.GL_TEXTURE_2D,
+            texture[0],
+            0,
+        )
+        fun output(): Int {
+            renderer.draw(1, 1, mode = 3)
+            val result = ByteBuffer.allocateDirect(4)
+            GL.glReadPixels(0, 0, 1, 1, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, result)
+            assertEquals(GL.GL_NO_ERROR, GL.glGetError())
+            assertEquals(result[0], result[1])
+            assertEquals(result[1], result[2])
+            return result[0].toInt() and 255
+        }
+        fun pq(linear: Double): Double {
+            val y = (linear * 203.0 / 10000.0).pow(2610.0 / 16384.0)
+            return ((3424.0 / 4096.0 + 2413.0 / 128.0 * y) / (1.0 + 2392.0 / 128.0 * y)).pow(
+                2523.0 / 32.0
+            ) * 255
+        }
+        try {
+            val hdr = output()
+            assertEquals(
+                "HDR preview retains highlights without SDR compression",
+                pq(((.8 + .055) / 1.055).pow(2.4) * 4),
+                hdr.toDouble(),
+                2.0,
+            )
+            renderer.settings.put("dynamicRange", "sdr")
+            val sdr = output()
+            assertEquals("SDR mode stays within SDR white", pq(1.0), sdr.toDouble(), 2.0)
+            assertTrue(hdr > sdr + 10)
+            renderer.proof = false
+            renderer.histogram(base)
+            assertFalse("Histogram must not change preview mode", renderer.proof)
+        } finally {
+            GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, 0)
+            GL.glDeleteFramebuffers(1, fbo, 0)
+            GL.glDeleteTextures(1, texture, 0)
+            renderer.destroy()
+            base.recycle()
+            map.recycle()
+        }
+    }
+
+    @Test
     fun gallerySavePreservesEncodedImageAndPublishesEntry() {
         if (android.os.Build.VERSION.SDK_INT < 29) return
         val bitmap = Bitmap.createBitmap(13, 17, Bitmap.Config.ARGB_8888)
