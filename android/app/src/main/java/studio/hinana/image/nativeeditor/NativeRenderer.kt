@@ -9,7 +9,36 @@ import java.nio.ByteOrder
 import kotlin.math.*
 import org.json.JSONObject
 
-class NativeRenderer {
+class NativeRenderer(private val vulkan: NativeVulkan? = null) {
+    val usesVulkan
+        get() = vulkan != null
+
+    val hdrActive
+        get() = vulkan?.hdrActive ?: false
+
+    private var offscreen = false
+
+    fun resize(width: Int, height: Int) {
+        vulkan?.resize(width, height)
+    }
+
+    fun maxTextureSize(): Int {
+        vulkan?.let {
+            return it.maxTextureSize
+        }
+        val result = IntArray(1)
+        GL.glGetIntegerv(GL.GL_MAX_TEXTURE_SIZE, result, 0)
+        return result[0]
+    }
+
+    fun readPixels(width: Int, height: Int, pixels: ByteBuffer) {
+        if (vulkan != null) vulkan.pixels(pixels)
+        else {
+            GL.glReadPixels(0, 0, width, height, GL.GL_RGBA, GL.GL_FLOAT, pixels)
+            check(GL.glGetError() == GL.GL_NO_ERROR)
+        }
+    }
+
     private var warpKey = ""
     private var maskKey = ""
     var overlayID = ""
@@ -28,6 +57,7 @@ class NativeRenderer {
         }
 
     fun init() {
+        if (vulkan != null) return
         fun shader(type: Int, source: String): Int {
             val id = GL.glCreateShader(type)
             GL.glShaderSource(id, source)
@@ -56,19 +86,23 @@ class NativeRenderer {
     private fun uniform(name: String) = GL.glGetUniformLocation(program, name)
 
     fun one(name: String, v: Double) {
-        GL.glUniform1f(uniform(name), v.toFloat())
+        if (vulkan != null) vulkan.set(name, v.toFloat())
+        else GL.glUniform1f(uniform(name), v.toFloat())
     }
 
     fun two(name: String, x: Double, y: Double) {
-        GL.glUniform2f(uniform(name), x.toFloat(), y.toFloat())
+        if (vulkan != null) vulkan.set(name, x.toFloat(), y.toFloat())
+        else GL.glUniform2f(uniform(name), x.toFloat(), y.toFloat())
     }
 
     fun three(name: String, x: Double, y: Double, z: Double) {
-        GL.glUniform3f(uniform(name), x.toFloat(), y.toFloat(), z.toFloat())
+        if (vulkan != null) vulkan.set(name, x.toFloat(), y.toFloat(), z.toFloat())
+        else GL.glUniform3f(uniform(name), x.toFloat(), y.toFloat(), z.toFloat())
     }
 
     fun four(name: String, x: Double, y: Double, z: Double, w: Double) {
-        GL.glUniform4f(uniform(name), x.toFloat(), y.toFloat(), z.toFloat(), w.toFloat())
+        if (vulkan != null) vulkan.set(name, x.toFloat(), y.toFloat(), z.toFloat(), w.toFloat())
+        else GL.glUniform4f(uniform(name), x.toFloat(), y.toFloat(), z.toFloat(), w.toFloat())
     }
 
     fun upload(bitmap: Bitmap) {
@@ -76,7 +110,7 @@ class NativeRenderer {
         bitmapHeight = bitmap.height
         bind(0)
         uploadBitmap(bitmap)
-        GL.glUseProgram(program)
+        if (vulkan == null) GL.glUseProgram(program)
         one("gainEnabled", 0.0)
         one("gainP3", if (photo?.settings?.optBoolean("sourceGainP3") == true) 1.0 else 0.0)
         if (Build.VERSION.SDK_INT >= 34 && bitmap.hasGainmap()) {
@@ -101,7 +135,8 @@ class NativeRenderer {
             uploadBitmap(gain.gainmapContents)
             one("gainEnabled", 1.0)
             fun array(name: String, v: FloatArray) {
-                GL.glUniform3fv(uniform(name), 1, v, 0)
+                if (vulkan != null) vulkan.array(name, v, 3)
+                else GL.glUniform3fv(uniform(name), 1, v, 0)
             }
             array("gainMin", gain.ratioMin)
             array("gainMax", gain.ratioMax)
@@ -117,6 +152,10 @@ class NativeRenderer {
      * formats with the bitmap's actual stride instead.
      */
     private fun uploadBitmap(bitmap: Bitmap) {
+        if (vulkan != null) {
+            vulkan.uploadBitmap(bitmap)
+            return
+        }
         val config = bitmap.config
         if (
             config != Bitmap.Config.ALPHA_8 &&
@@ -187,6 +226,10 @@ class NativeRenderer {
     }
 
     private fun bind(index: Int) {
+        if (vulkan != null) {
+            vulkan.bind(index)
+            return
+        }
         GL.glActiveTexture(GL.GL_TEXTURE0 + index)
         GL.glBindTexture(GL.GL_TEXTURE_2D, textures[index])
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR)
@@ -216,26 +259,37 @@ class NativeRenderer {
     private fun liquify() {
         val value = settings.optJSONObject("liquify")
         one("warpEnabled", if (value == null) 0.0 else 1.0)
-        GL.glUniform1i(uniform("warpMap"), 5)
+        if (vulkan == null) GL.glUniform1i(uniform("warpMap"), 5)
         val key = value?.optString("data") ?: ""
         if (value == null || key == warpKey) return
         val grid = NativeLiquify(value)
         val buffer = ByteBuffer.allocateDirect(grid.data.size * 4).order(ByteOrder.nativeOrder())
         buffer.asFloatBuffer().put(grid.data)
-        bind(5)
-        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_NEAREST)
-        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_NEAREST)
-        GL.glTexImage2D(
-            GL.GL_TEXTURE_2D,
-            0,
-            GL.GL_RG32F,
-            NativeLiquify.SIZE,
-            NativeLiquify.SIZE,
-            0,
-            GL.GL_RG,
-            GL.GL_FLOAT,
-            buffer,
-        )
+        if (vulkan != null)
+            vulkan.uploadBytes(
+                5,
+                NativeLiquify.SIZE,
+                NativeLiquify.SIZE,
+                103,
+                NativeLiquify.SIZE * 8,
+                buffer,
+            )
+        else {
+            bind(5)
+            GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_NEAREST)
+            GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_NEAREST)
+            GL.glTexImage2D(
+                GL.GL_TEXTURE_2D,
+                0,
+                GL.GL_RG32F,
+                NativeLiquify.SIZE,
+                NativeLiquify.SIZE,
+                0,
+                GL.GL_RG,
+                GL.GL_FLOAT,
+                buffer,
+            )
+        }
         warpKey = key
     }
 
@@ -275,23 +329,28 @@ class NativeRenderer {
                     NativeMasks.coverage(masks.getJSONObject(i), width, height)
                 )
                 data.position(0)
-                bind(2)
-                GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
-                GL.glTexImage2D(
-                    GL.GL_TEXTURE_2D,
-                    0,
-                    GL.GL_R8,
-                    width,
-                    height * masks.length(),
-                    0,
-                    GL.GL_RED,
-                    GL.GL_UNSIGNED_BYTE,
-                    data,
-                )
-                GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
+                if (vulkan != null)
+                    vulkan.uploadBytes(2, width, height * masks.length(), 9, width, data)
+                else {
+                    bind(2)
+                    GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
+                    GL.glTexImage2D(
+                        GL.GL_TEXTURE_2D,
+                        0,
+                        GL.GL_R8,
+                        width,
+                        height * masks.length(),
+                        0,
+                        GL.GL_RED,
+                        GL.GL_UNSIGNED_BYTE,
+                        data,
+                    )
+                    GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
+                }
             }
         }
-        GL.glUniform1i(uniform("maskCount"), masks.length())
+        if (vulkan != null) vulkan.set("maskCount", masks.length().toFloat())
+        else GL.glUniform1i(uniform("maskCount"), masks.length())
         val edits = FloatArray(32)
         val flags = FloatArray(32)
         for (i in 0 until masks.length()) {
@@ -307,8 +366,10 @@ class NativeRenderer {
                 else 0f
             flags[i * 4 + 3] = if (m.optString("id") == overlayID) 1f else 0f
         }
-        GL.glUniform4fv(uniform("maskEdits"), 8, edits, 0)
-        GL.glUniform4fv(uniform("maskFlags"), 8, flags, 0)
+        if (vulkan != null) vulkan.array("maskEdits", edits, 4)
+        else GL.glUniform4fv(uniform("maskEdits"), 8, edits, 0)
+        if (vulkan != null) vulkan.array("maskFlags", flags, 4)
+        else GL.glUniform4fv(uniform("maskFlags"), 8, flags, 0)
         one("maskOverlay", if (overlayID.isEmpty()) 0.0 else 1.0)
     }
 
@@ -321,16 +382,27 @@ class NativeRenderer {
         mode: Int = 0,
         outputP3: Boolean = false,
     ) {
-        GL.glViewport(0, 0, width, height)
-        GL.glUseProgram(program)
-        GL.glClearColor(.07f, .08f, .085f, 1f)
-        GL.glClear(GL.GL_COLOR_BUFFER_BIT)
-        val p = photo ?: return
+        if (vulkan == null) GL.glViewport(0, 0, width, height)
+        if (vulkan == null) GL.glUseProgram(program)
+        if (vulkan == null) {
+            GL.glClearColor(.07f, .08f, .085f, 1f)
+            GL.glClear(GL.GL_COLOR_BUFFER_BIT)
+        }
+        val p =
+            photo
+                ?: run {
+                    if (vulkan != null) {
+                        four("viewport", 2.0, 2.0, 1.0, 1.0)
+                        one("exportMode", mode.toDouble())
+                        vulkan.draw(width, height, !offscreen && vulkan.isWindow)
+                    }
+                    return
+                }
         val a = settings
         fun n(key: String) = a.optDouble(key, 0.0)
-        GL.glUniform1i(uniform("source"), 0)
-        GL.glUniform1i(uniform("gainmap"), 1)
-        GL.glUniform1i(uniform("coverage"), 2)
+        if (vulkan == null) GL.glUniform1i(uniform("source"), 0)
+        if (vulkan == null) GL.glUniform1i(uniform("gainmap"), 1)
+        if (vulkan == null) GL.glUniform1i(uniform("coverage"), 2)
         two("dimensions", p.width.toDouble(), p.height.toDouble())
         val dim = dimensions()
         two("outputSize", dim.first, dim.second)
@@ -369,7 +441,8 @@ class NativeRenderer {
                 bands[i * 3 + j] = n("mixer_${b}_$k").toFloat()
             }
         }
-        GL.glUniform3fv(uniform("bands"), 8, bands, 0)
+        if (vulkan != null) vulkan.array("bands", bands, 3)
+        else GL.glUniform3fv(uniform("bands"), 8, bands, 0)
         one("p3", if (a.optString("colorSpace") == "display-p3") 1.0 else 0.0)
         one("legacy", if (a.optString("precision") == "legacy") 1.0 else 0.0)
         one("hdr", if (a.optString("dynamicRange") == "hdr") 1.0 else 0.0)
@@ -382,6 +455,10 @@ class NativeRenderer {
         masks()
         liquify()
         rebind()
+        if (vulkan != null) {
+            vulkan.draw(width, height, !offscreen && vulkan.isWindow)
+            return
+        }
         GL.glEnableVertexAttribArray(0)
         GL.glVertexAttribPointer(0, 2, GL.GL_FLOAT, false, 8, vertices)
         GL.glDrawArrays(GL.GL_TRIANGLE_STRIP, 0, 4)
@@ -393,6 +470,32 @@ class NativeRenderer {
     }
 
     fun histogram(bitmap: Bitmap): Array<IntArray> {
+        if (vulkan != null) {
+            val state = vulkan.snapshot()
+            val oldProof = proof
+            val oldOverlay = overlayID
+            vulkan.swapSources()
+            try {
+                upload(bitmap)
+                proof = true
+                overlayID = ""
+                offscreen = true
+                draw(64, 64)
+                val pixels = ByteBuffer.allocateDirect(64 * 64 * 16).order(ByteOrder.nativeOrder())
+                vulkan.pixels(pixels)
+                val floats = pixels.asFloatBuffer()
+                val bins = Array(3) { IntArray(64) }
+                for (i in 0 until 64 * 64) for (c in 0..2) bins[c][
+                    (floats[i * 4 + c].coerceIn(0f, 1f) * 255).roundToInt() / 4]++
+                return bins
+            } finally {
+                vulkan.swapSources()
+                vulkan.restore(state)
+                proof = oldProof
+                overlayID = oldOverlay
+                offscreen = false
+            }
+        }
         val oldWidth = bitmapWidth
         val oldHeight = bitmapHeight
         val oldOverlay = overlayID
@@ -464,7 +567,7 @@ class NativeRenderer {
             bitmapHeight = oldHeight
             overlayID = oldOverlay
             proof = oldProof
-            GL.glUseProgram(program)
+            if (vulkan == null) GL.glUseProgram(program)
             gain.forEach { (name, values) ->
                 if (values.size == 1) one(name, values[0].toDouble())
                 else GL.glUniform3fv(uniform(name), 1, values, 0)
@@ -477,6 +580,10 @@ class NativeRenderer {
     }
 
     fun destroy() {
+        if (vulkan != null) {
+            vulkan.destroy()
+            return
+        }
         GL.glDeleteTextures(6, textures, 0)
         GL.glDeleteProgram(program)
     }

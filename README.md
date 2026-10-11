@@ -278,7 +278,7 @@ npm run test:native:android     # 연결된 테스트 에뮬레이터에서 실�
 npm run test:native:ios         # 격리된 새 시뮬레이터에서 검증 후 삭제
 ```
 
-Android는 JDK 21, Android SDK 36과 OpenGL ES 3 기기가 필요합니다. `ANDROID_HOME` 또는 `android/local.properties`에 SDK 경로를 설정합니다. APK는 `android/app/build/outputs/apk/debug/app-debug.apk`에 생성되며 테스트용 debug 서명입니다. iOS는 macOS·Xcode·iOS 시뮬레이터 런타임과 Metal 컴파일러가 필요합니다. Xcode가 Metal 도구 설치를 요구하면 `xcodebuild -downloadComponent MetalToolchain`을 실행합니다. 실제 iPhone은 Xcode의 Apple ID·개발 Team으로 서명하고 개발자 모드를 켜야 합니다. 배포용 서명 및 스토어 등록은 별도입니다.
+Android는 JDK 21, Android SDK 36, NDK 29.0.14206865, CMake 3.22.1이 필요합니다. 지원 기기는 Vulkan을 우선 사용하고 필요한 형식이나 표면 구성이 없으면 OpenGL ES 3으로 실행합니다. `ANDROID_HOME` 또는 `android/local.properties`에 SDK 경로를 설정합니다. APK는 `android/app/build/outputs/apk/debug/app-debug.apk`에 생성되며 테스트용 debug 서명입니다. iOS는 macOS·Xcode·iOS 시뮬레이터 런타임과 Metal 컴파일러가 필요합니다. Xcode가 Metal 도구 설치를 요구하면 `xcodebuild -downloadComponent MetalToolchain`을 실행합니다. 실제 iPhone은 Xcode의 Apple ID·개발 Team으로 서명하고 개발자 모드를 켜야 합니다. 배포용 서명 및 스토어 등록은 별도입니다.
 
 GitHub Actions의 `Native mobile apps` 워크플로는 Android 에뮬레이터 테스트와 iOS 네이티브 진단을 실행하고 APK·시뮬레이터 앱을 빌드합니다. 테스트는 데스크톱 보정 엔진과 GPU 결과 비교, 피부 보정, 프로젝트·실행 취소 기록, 16비트/PQ 출력과 EXIF, 기존 작업 공간 이관을 확인합니다. 실제 사진 선택·공유·물리적인 HDR 밝기는 실기기 확인이 필요합니다. 테스트의 기존 저장소 fixture는 테스트 에뮬레이터/격리 시뮬레이터에서만 실행하세요.
 
@@ -289,3 +289,14 @@ iOS WebP 인코딩은 BSD 라이선스의 libwebp 1.6.0을 사용하며 Swift Pa
 ## macOS 0.14.6 HDR 게인맵 원본 읽기
 
 macOS 14 이상에서 HDR 게인맵이 있는 JPEG/HEIF를 Core Image로 확장해 16비트 PQ 작업 이미지로 가져옵니다. 8비트 브라우저 캔버스를 거치지 않아 원본 HDR 하이라이트가 유지됩니다. HDR 원본은 자동으로 HDR 편집 모드를 선택합니다. 기존 프로젝트의 JPEG 원본도 32비트 HDR 편집·내보내기에서 게인맵을 읽으며, 이전 SDR 모드의 처리는 유지합니다. 이미 SDR로 내보낸 파일에서는 게인맵을 복원할 수 없습니다. 이 변경은 macOS 읽기 경로에만 적용됩니다.
+
+
+## Android 0.15.0 Vulkan 렌더링
+
+Android의 사진 미리보기, 히스토그램, 줄 단위 내보내기를 Vulkan으로 전환했습니다. Kotlin 네이티브 UI, 사진 가져오기, 확대·이동, 프리셋, 보정·피부 보정, 색상 믹서, 로컬 마스크, 리퀴파이, 프로젝트·실행 취소, EXIF와 갤러리 저장 흐름은 유지합니다. GLES 호환 경로와 Vulkan SPIR-V는 같은 `NativeShaders.kt`의 사진 계산식을 사용하며 빌드 시 셰이더를 컴파일합니다. 데스크톱과 iOS 렌더러는 그대로입니다.
+
+HDR10 화면에서 지원하는 표면 형식을 조회해 실제 10비트 Rec.2020/PQ 스왑체인을 선택합니다. 지원하지 않는 화면은 SDR 변환 미리보기를 사용합니다. sRGB/Display P3, F16 입력, 홀수 폭 게인맵, HDR JPEG, 16비트 SDR/HDR PQ PNG 출력도 유지합니다. 갤러리의 PQ 프로파일 해석과 파일 압축 방식은 렌더링 API와 별개입니다.
+
+렌더링은 전용 스레드에서 필요한 프레임만 요청합니다. 비트맵을 JNI에서 직접 잠가 Java의 사진 전체 복사 버퍼를 생략하고, 동일 크기의 텍스처와 업로드·유니폼·읽기 버퍼를 재사용합니다. 또한, 내보내기는 최대 128줄의 RGBA32F 타깃을 사용합니다. GPU 완료 펜스와 이미지별 표시 세마포어로 자원 재사용을 동기화하고 화면 제거·복귀 시 자원을 해제/재생성합니다. Vulkan 기기/필수 형식/화면 생성이 지원되지 않으면 기존 GLES 3 호환 렌더러를 사용합니다. Vulkan이 모든 기기에서 더 빠르다는 보장은 없으며 디코딩·압축과 기존 출력 크기 제한은 유지됩니다.
+
+Galaxy Z Fold 7에서 GLES/Vulkan 색상·마스크·리퀴파이·회전·자르기, HDR/PQ/게인맵·고정밀 출력, 히스토그램 상태 보존과 여러 스트립 저장을 비교합니다. `VulkanEditorTest`는 실제 Vulkan 선택 여부를 검사하며, 화면 테스트는 임시 사진을 사용해 핀치·이동·맞춤과 앱 복귀를 확인합니다. Khronos 검증 계층은 개발 검사 시에만 외부 로드하며 APK에 포함하지 않습니다.

@@ -2,7 +2,6 @@ package studio.hinana.image.nativeeditor
 
 import android.content.Context
 import android.graphics.*
-import android.opengl.EGL14
 import android.opengl.GLES30 as GL
 import android.os.Build
 import androidx.exifinterface.media.ExifInterface
@@ -112,80 +111,34 @@ object NativeExport {
         maxSide: Int,
         quality: Int,
         preserve: Boolean,
+        preferVulkan: Boolean = true,
     ): File {
         val hdrJpeg = format == "hdr-jpeg"
         require(!hdrJpeg || Build.VERSION.SDK_INT >= 34) { "HDR JPEG는 Android 14 이상에서 지원합니다." }
-        val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
-        val version = IntArray(2)
-        check(EGL14.eglInitialize(display, version, 0, version, 1))
-        val configs = arrayOfNulls<android.opengl.EGLConfig>(1)
-        val count = IntArray(1)
-        check(
-            EGL14.eglChooseConfig(
-                display,
-                intArrayOf(
-                    EGL14.EGL_RENDERABLE_TYPE,
-                    0x40,
-                    EGL14.EGL_SURFACE_TYPE,
-                    EGL14.EGL_PBUFFER_BIT,
-                    EGL14.EGL_RED_SIZE,
-                    8,
-                    EGL14.EGL_GREEN_SIZE,
-                    8,
-                    EGL14.EGL_BLUE_SIZE,
-                    8,
-                    EGL14.EGL_ALPHA_SIZE,
-                    8,
-                    EGL14.EGL_NONE,
-                ),
-                0,
-                configs,
-                0,
-                1,
-                count,
-                0,
-            )
-        )
-        val eglContext =
-            EGL14.eglCreateContext(
-                display,
-                configs[0],
-                EGL14.EGL_NO_CONTEXT,
-                intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 3, EGL14.EGL_NONE),
-                0,
-            )
-        val surface =
-            EGL14.eglCreatePbufferSurface(
-                display,
-                configs[0],
-                intArrayOf(EGL14.EGL_WIDTH, 1, EGL14.EGL_HEIGHT, 1, EGL14.EGL_NONE),
-                0,
-            )
-        check(EGL14.eglMakeCurrent(display, surface, surface, eglContext))
-        val renderer = NativeRenderer()
-        renderer.init()
-        renderer.photo = photo
-        renderer.settings = org.json.JSONObject(photo.settings.toString())
-        renderer.proof =
-            photo.settings.optString("dynamicRange") == "hdr" && format != "hdr-png" && !hdrJpeg
-        val dimensions = renderer.dimensions()
-        val scale =
-            if (maxSide > 0) min(1.0, maxSide / max(dimensions.first, dimensions.second)) else 1.0
-        val width = max(1, (dimensions.first * scale).roundToInt())
-        val height = max(1, (dimensions.second * scale).roundToInt())
-        val original = File(library.root, photo.file)
-        val ext = if (format.contains("png")) "png" else if (format == "webp") "webp" else "jpg"
-        val target =
-            File(context.cacheDir, File(photo.name).nameWithoutExtension + "-edited." + ext)
-        val limit = IntArray(1)
-        GL.glGetIntegerv(GL.GL_MAX_TEXTURE_SIZE, limit, 0)
-        require(width <= limit[0]) { "출력 폭이 GPU 제한을 넘습니다. 이미지 크기를 줄여 주세요." }
-        val hdrEncoder =
-            if (hdrJpeg) NativeHDRJpeg(width, height, photo.settings.optDouble("hdrPeak", 1000.0))
-            else null
+        val gpu = NativeGPUContext(context, preferVulkan = preferVulkan)
+        val renderer = gpu.renderer
         var gainmap: Bitmap? = null
         var bitmap: Bitmap? = null
         try {
+            renderer.photo = photo
+            renderer.settings = org.json.JSONObject(photo.settings.toString())
+            renderer.proof =
+                photo.settings.optString("dynamicRange") == "hdr" && format != "hdr-png" && !hdrJpeg
+            val dimensions = renderer.dimensions()
+            val scale =
+                if (maxSide > 0) min(1.0, maxSide / max(dimensions.first, dimensions.second))
+                else 1.0
+            val width = max(1, (dimensions.first * scale).roundToInt())
+            val height = max(1, (dimensions.second * scale).roundToInt())
+            val original = File(library.root, photo.file)
+            val ext = if (format.contains("png")) "png" else if (format == "webp") "webp" else "jpg"
+            val target =
+                File(context.cacheDir, File(photo.name).nameWithoutExtension + "-edited." + ext)
+            require(width <= renderer.maxTextureSize()) { "출력 폭이 GPU 제한을 넘습니다. 이미지 크기를 줄여 주세요." }
+            val hdrEncoder =
+                if (hdrJpeg)
+                    NativeHDRJpeg(width, height, photo.settings.optDouble("hdrPeak", 1000.0))
+                else null
             if (!format.contains("png")) {
                 require(width.toLong() * height <= 32_000_000) { "32MP 초과 출력은 PNG를 사용해 주세요." }
                 bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -208,6 +161,9 @@ object NativeExport {
                         format == "hdr-png",
                     )
                 else null
+            val pixels =
+                ByteBuffer.allocateDirect(width * min(128, height) * 16)
+                    .order(ByteOrder.nativeOrder())
             for (y in 0 until height step 128) {
                 val rows = min(128, height - y)
                 // Decode only the source rectangle needed by this output strip, including filter
@@ -241,37 +197,39 @@ object NativeExport {
                 source.recycle()
                 val texture = IntArray(1)
                 val fbo = IntArray(1)
-                GL.glGenTextures(1, texture, 0)
-                GL.glBindTexture(GL.GL_TEXTURE_2D, texture[0])
-                GL.glTexImage2D(
-                    GL.GL_TEXTURE_2D,
-                    0,
-                    if (
-                        GL.glGetString(GL.GL_EXTENSIONS)?.contains("GL_EXT_color_buffer_float") ==
-                            true
+                if (!renderer.usesVulkan) {
+                    GL.glGenTextures(1, texture, 0)
+                    GL.glBindTexture(GL.GL_TEXTURE_2D, texture[0])
+                    GL.glTexImage2D(
+                        GL.GL_TEXTURE_2D,
+                        0,
+                        if (
+                            GL.glGetString(GL.GL_EXTENSIONS)
+                                ?.contains("GL_EXT_color_buffer_float") == true
+                        )
+                            GL.GL_RGBA32F
+                        else GL.GL_RGBA16F,
+                        width,
+                        rows,
+                        0,
+                        GL.GL_RGBA,
+                        GL.GL_FLOAT,
+                        null,
                     )
-                        GL.GL_RGBA32F
-                    else GL.GL_RGBA16F,
-                    width,
-                    rows,
-                    0,
-                    GL.GL_RGBA,
-                    GL.GL_FLOAT,
-                    null,
-                )
-                GL.glGenFramebuffers(1, fbo, 0)
-                GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, fbo[0])
-                GL.glFramebufferTexture2D(
-                    GL.GL_FRAMEBUFFER,
-                    GL.GL_COLOR_ATTACHMENT0,
-                    GL.GL_TEXTURE_2D,
-                    texture[0],
-                    0,
-                )
-                check(
-                    GL.glCheckFramebufferStatus(GL.GL_FRAMEBUFFER) == GL.GL_FRAMEBUFFER_COMPLETE
-                ) {
-                    "이 기기는 고정밀 GPU 출력에 필요한 RGBA16F를 지원하지 않습니다."
+                    GL.glGenFramebuffers(1, fbo, 0)
+                    GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, fbo[0])
+                    GL.glFramebufferTexture2D(
+                        GL.GL_FRAMEBUFFER,
+                        GL.GL_COLOR_ATTACHMENT0,
+                        GL.GL_TEXTURE_2D,
+                        texture[0],
+                        0,
+                    )
+                    check(
+                        GL.glCheckFramebufferStatus(GL.GL_FRAMEBUFFER) == GL.GL_FRAMEBUFFER_COMPLETE
+                    ) {
+                        "이 기기는 고정밀 GPU 출력에 필요한 RGBA16F를 지원하지 않습니다."
+                    }
                 }
                 // Rebind source after creating the output texture.
                 renderer.rebind()
@@ -285,10 +243,8 @@ object NativeExport {
                     if (format == "hdr-png") 2 else 1,
                     space == "display-p3",
                 )
-                val pixels =
-                    ByteBuffer.allocateDirect(width * rows * 16).order(ByteOrder.nativeOrder())
-                GL.glReadPixels(0, 0, width, rows, GL.GL_RGBA, GL.GL_FLOAT, pixels)
-                check(GL.glGetError() == GL.GL_NO_ERROR) { "고정밀 픽셀 출력 실패" }
+                pixels.clear()
+                renderer.readPixels(width, rows, pixels)
                 val floats = pixels.asFloatBuffer()
                 for (row in rows - 1 downTo 0) {
                     if (output != null) {
@@ -330,8 +286,10 @@ object NativeExport {
                         bitmap!!.setPixels(colors, 0, width, 0, y + rows - 1 - row, width, 1)
                     }
                 }
-                GL.glDeleteFramebuffers(1, fbo, 0)
-                GL.glDeleteTextures(1, texture, 0)
+                if (!renderer.usesVulkan) {
+                    GL.glDeleteFramebuffers(1, fbo, 0)
+                    GL.glDeleteTextures(1, texture, 0)
+                }
             }
             output?.close()
             if (bitmap != null) {
@@ -382,16 +340,7 @@ object NativeExport {
         } finally {
             bitmap?.recycle()
             gainmap?.recycle()
-            renderer.destroy()
-            EGL14.eglMakeCurrent(
-                display,
-                EGL14.EGL_NO_SURFACE,
-                EGL14.EGL_NO_SURFACE,
-                EGL14.EGL_NO_CONTEXT,
-            )
-            EGL14.eglDestroySurface(display, surface)
-            EGL14.eglDestroyContext(display, eglContext)
-            EGL14.eglTerminate(display)
+            gpu.close()
         }
     }
 

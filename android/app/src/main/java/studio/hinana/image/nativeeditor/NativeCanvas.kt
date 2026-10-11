@@ -2,35 +2,13 @@ package studio.hinana.image.nativeeditor
 
 import android.content.Context
 import android.graphics.*
-import android.opengl.GLSurfaceView
 import android.os.Build
 import android.view.*
 import java.io.File
-import javax.microedition.khronos.egl.EGLConfig
-import javax.microedition.khronos.opengles.GL10
 import kotlin.math.*
 import org.json.JSONObject
 
-class NativeCanvas(context: Context) : GLSurfaceView(context), GLSurfaceView.Renderer {
-    val engine = NativeRenderer()
-    var onHDRChanged: (() -> Unit)? = null
-    private val hdrSurface =
-        NativeHDRSurface(
-            Build.VERSION.SDK_INT >= 26 &&
-                (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager)
-                    .defaultDisplay
-                    .hdrCapabilities
-                    .supportedHdrTypes
-                    .contains(Display.HdrCapabilities.HDR_TYPE_HDR10)
-        ) {
-            post {
-                onHDRChanged?.invoke()
-                requestRender()
-            }
-        }
-    val hdrDisplayActive: Boolean
-        get() = hdrSurface.active
-
+class NativeCanvas(context: Context) : NativeRenderView(context) {
     private var file = ""
     private var library: NativeLibrary? = null
     private var tileOrigin = 0.0 to 0.0
@@ -110,12 +88,6 @@ class NativeCanvas(context: Context) : GLSurfaceView(context), GLSurfaceView.Ren
         )
 
     init {
-        setEGLContextClientVersion(3)
-        setEGLConfigChooser(hdrSurface)
-        setEGLWindowSurfaceFactory(hdrSurface)
-        setRenderer(this)
-        renderMode = RENDERMODE_WHEN_DIRTY
-        preserveEGLContextOnPause = true
         contentDescription = "사진 편집 미리보기 · 두 손가락 확대·축소"
     }
 
@@ -209,18 +181,13 @@ class NativeCanvas(context: Context) : GLSurfaceView(context), GLSurfaceView.Ren
         }
     }
 
-    override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+    override fun renderReady() {
         try {
-            engine.init()
             ready = true
             post { library?.let { load(it) } }
         } catch (e: Exception) {
             post { error?.invoke(e.message ?: "GPU 초기화 오류") }
         }
-    }
-
-    override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
-        clamp()
     }
 
     private fun fit(): Double {
@@ -368,20 +335,28 @@ class NativeCanvas(context: Context) : GLSurfaceView(context), GLSurfaceView.Ren
         thumbnail = null
     }
 
-    override fun onDrawFrame(gl: GL10?) {
+    override fun renderResized() {
+        clamp()
+    }
+
+    override fun renderLost() {
+        ready = false
+    }
+
+    override fun renderFrame() {
         if (!ready) return
         try {
             if (histogramDirty && thumbnail != null) {
                 histogramDirty = false
                 val bins = engine.histogram(thumbnail!!)
-                post { onHistogram?.invoke(bins) }
+                post { if (!disposed) onHistogram?.invoke(bins) }
             }
             val d = engine.dimensions()
             val s = scale()
             val w = d.first * s
             val h = d.second * s
             engine.overlayID = if (showOverlay) selectedMask else ""
-            engine.proof = !hdrSurface.active
+            engine.proof = !hdrDisplayActive
             engine.draw(
                 width,
                 height,
@@ -393,11 +368,15 @@ class NativeCanvas(context: Context) : GLSurfaceView(context), GLSurfaceView.Ren
                 ),
                 tileOrigin,
                 tileSize,
-                mode = if (hdrSurface.active) 3 else 0,
+                mode = if (hdrDisplayActive) 3 else 0,
             )
         } catch (e: Exception) {
             post { error?.invoke(e.message ?: "렌더링 오류") }
         }
+    }
+
+    override fun renderError(error: Exception) {
+        post { if (!disposed) this.error?.invoke(error.message ?: "GPU 렌더링 오류") }
     }
 
     private fun point(e: MotionEvent): Pair<Double, Double>? {

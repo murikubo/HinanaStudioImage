@@ -2,8 +2,10 @@ apply plugin: 'com.android.application'
 apply plugin: 'org.jetbrains.kotlin.android'
 
 android {
+    ndkVersion "29.0.14206865"
+    externalNativeBuild { cmake { path "src/main/cpp/CMakeLists.txt"; version "3.22.1" } }
     sourceSets {
-        main.assets.srcDirs = ["../../public"]
+        main.assets.srcDirs = ["../../public", "$buildDir/generated/vulkanAssets"]
         androidTest.assets.srcDirs = ["../../tests/native"]
     }
     buildFeatures { buildConfig true }
@@ -13,10 +15,11 @@ android {
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "studio.hinana.image"
+        ndk { abiFilters "arm64-v8a", "armeabi-v7a", "x86_64" }
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 22
-        versionName "0.14.6"
+        versionCode 23
+        versionName "0.15.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -54,3 +57,70 @@ try {
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }
+
+// Compile the same photo math used by the GLES compatibility renderer to SPIR-V.
+// Uniforms occupy vec4 slots, so JNI and Kotlin share an unambiguous std140 layout.
+tasks.register('compilePhotoShaders') {
+    def shaderSource = file('src/main/java/studio/hinana/image/nativeeditor/NativeShaders.kt')
+    inputs.file(shaderSource)
+    inputs.property("ndkVersion", android.ndkVersion)
+    outputs.dir("$buildDir/generated/vulkanAssets/vulkan")
+    doLast {
+        def output = file("$buildDir/generated/vulkanAssets/vulkan")
+        output.mkdirs()
+        def source = shaderSource.text.split('const val fragment =')[1].split('"""')[1]
+        source = source.replace('#version 300 es', '#version 450').replace('precision highp float;', '')
+        int slot = 0
+        def defines = []
+        source = source.replaceAll(/uniform (sampler2D|float|int|vec[234]) (\w+)(\[8\])?;/) { all, type, name, array ->
+            if (type == 'sampler2D') {
+                def binding = [source:1, gainmap:2, coverage:3, warpMap:4][name]
+                return "layout(set=0,binding=$binding) uniform sampler2D $name;"
+            }
+            int start = slot
+            slot += array ? 8 : 1
+            if (array) {
+                defines.add("#define $name u.$name")
+                return ""
+            }
+            def swizzle = [float:'.x', int:'.x', vec2:'.xy', vec3:'.xyz', vec4:''][type]
+            def value = "u.values[$start]$swizzle"
+            defines.add("#define $name " + (type == 'int' ? "int($value)" : value))
+            return ""
+        }
+        // Arrays require std140 vec4 stride, represented with indexable macro aliases.
+        // Replace their references with values[start + index].xyz/xyzw.
+        int index = 0
+        def original = shaderSource.text.split('const val fragment =')[1].split('"""')[1]
+        (original =~ /uniform (float|int|vec[234]) (\w+)(\[8\])?;/).each { m ->
+            if (m[3]) {
+                def sw = m[1] == 'vec3' ? '.xyz' : ''
+                source = source.replaceAll('\\b' + m[2] + '\\[([^\\]]+)\\]', 'u.values[' + index + ' + ($1)]' + sw)
+            }
+            index += m[3] ? 8 : 1
+        }
+        defines = defines.findAll { !it.contains('u.bands') && !it.contains('u.maskEdits') && !it.contains('u.maskFlags') }
+        source = source.replace('in vec2 uv;', 'layout(location=0) in vec2 uv;').replace('out vec4 pixel;', 'layout(location=0) out vec4 pixel;')
+        source = source.replace('#version 450', '#version 450\nlayout(set=0,binding=0,std140) uniform Parameters { vec4 values[' + slot + ']; } u;\n' + defines.join('\n'))
+        new File(output, 'photo.frag').text = source
+        new File(output, 'photo.vert').text = """#version 450
+layout(location=0) out vec2 uv;
+void main() {
+    vec2 p=vec2((gl_VertexIndex & 1)*2-1,(gl_VertexIndex >> 1)*2-1);
+    // Keep GLES bottom-to-top pixel order in the offscreen render targets.
+    uv=(p+1.0)*0.5;
+    gl_Position=vec4(p.x,-p.y,0,1);
+}
+"""
+        def os = org.gradle.internal.os.OperatingSystem.current()
+        def host = os.isMacOsX() ? 'darwin-x86_64' : os.isWindows() ? 'windows-x86_64' : 'linux-x86_64'
+        def compiler = new File(android.sdkDirectory, "ndk/${android.ndkVersion}/shader-tools/$host/glslc" + (os.isWindows() ? '.exe' : ''))
+        ['vert', 'frag'].each { stage ->
+            exec { commandLine compiler, "${output}/photo.$stage", '-o', "${output}/photo.${stage}.spv" }
+        }
+        // Only compiled SPIR-V is shipped.
+        new File(output, 'photo.vert').delete()
+        new File(output, 'photo.frag').delete()
+    }
+}
+tasks.named('preBuild').configure { dependsOn 'compilePhotoShaders' }

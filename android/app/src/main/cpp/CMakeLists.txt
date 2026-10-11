@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(hinana_vulkan)
+add_library(hinana_vulkan SHARED VulkanRenderer.cpp)
+target_compile_features(hinana_vulkan PRIVATE cxx_std_17)
+target_compile_definitions(hinana_vulkan PRIVATE VK_USE_PLATFORM_ANDROID_KHR)
+target_compile_options(hinana_vulkan PRIVATE -O2 -Wall -Wextra -Werror=return-type)
+target_link_libraries(hinana_vulkan android log vulkan jnigraphics)
