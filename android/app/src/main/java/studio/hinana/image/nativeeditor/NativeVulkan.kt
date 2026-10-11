@@ -91,8 +91,8 @@ class NativeVulkan(assets: AssetManager, surface: Surface? = null, wantsHDR: Boo
 
     fun resize(width: Int, height: Int) = resize(handle, width, height)
 
-    fun draw(width: Int, height: Int, screen: Boolean = isWindow) =
-        draw(handle, width, height, buffer, screen)
+    fun draw(width: Int, height: Int, screen: Boolean = isWindow, offscreenTransform: Int = 1) =
+        draw(handle, width, height, buffer, screen, offscreenTransform)
 
     fun pixels(data: ByteBuffer) = pixels(handle, data)
 
@@ -138,6 +138,7 @@ class NativeVulkan(assets: AssetManager, surface: Surface? = null, wantsHDR: Boo
         height: Int,
         values: ByteBuffer,
         screen: Boolean,
+        transform: Int,
     )
 
     private external fun pixels(handle: Long, data: ByteBuffer)

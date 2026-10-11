@@ -18,8 +18,8 @@ android {
         ndk { abiFilters "arm64-v8a", "armeabi-v7a", "x86_64" }
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 23
-        versionName "0.15.0"
+        versionCode 24
+        versionName "0.15.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -105,11 +105,13 @@ tasks.register('compilePhotoShaders') {
         new File(output, 'photo.frag').text = source
         new File(output, 'photo.vert').text = """#version 450
 layout(location=0) out vec2 uv;
+layout(push_constant) uniform DisplayTransform { vec4 rows; } displayTransform;
 void main() {
     vec2 p=vec2((gl_VertexIndex & 1)*2-1,(gl_VertexIndex >> 1)*2-1);
     // Keep GLES bottom-to-top pixel order in the offscreen render targets.
     uv=(p+1.0)*0.5;
-    gl_Position=vec4(p.x,-p.y,0,1);
+    vec2 logical=vec2(p.x,-p.y);
+    gl_Position=vec4(dot(displayTransform.rows.xy,logical),dot(displayTransform.rows.zw,logical),0,1);
 }
 """
         def os = org.gradle.internal.os.OperatingSystem.current()

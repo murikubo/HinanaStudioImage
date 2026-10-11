@@ -475,4 +475,84 @@ class VulkanEditorTest {
             directory.deleteRecursively()
         }
     }
+
+    @Test
+    fun displayPreRotationPreservesPixelsAndPhotoAdjustments() {
+        val bridge = NativeVulkan(context.assets)
+        val renderer = NativeRenderer(bridge)
+        val width = 6
+        val height = 4
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        for (y in 0 until height) for (x in 0 until width) bitmap.setPixel(
+            x,
+            y,
+            Color.rgb(30 + x * 35, 20 + y * 50, 50 + x * 20 + y * 10),
+        )
+        val photo = NativePhoto("orientation", "orientation.png", "orientation.png", width, height)
+        renderer.photo = photo
+        renderer.settings =
+            NativePhoto.defaults().put("rotation", 90).put("exposure", .2).put("temperature", 7)
+        renderer.proof = false
+        val adjustments = renderer.settings.toString()
+        try {
+            renderer.upload(bitmap)
+            val original = pixels(renderer, width, height)
+            for (transform in listOf(1, 2, 4, 8, 16, 32, 64, 128)) {
+                val quarter = transform in listOf(2, 8, 32, 128)
+                val pw = if (quarter) height else width
+                val ph = if (quarter) width else height
+                bridge.draw(pw, ph, false, transform)
+                val data = ByteBuffer.allocateDirect(pw * ph * 16).order(ByteOrder.nativeOrder())
+                bridge.pixels(data)
+                val actual = data.asFloatBuffer()
+                for (y in 0 until height) for (x in 0 until width) {
+                    val mx = if (transform >= 16) width - 1 - x else x
+                    val rotation =
+                        when (transform) {
+                            2,
+                            32 -> 90
+                            4,
+                            64 -> 180
+                            8,
+                            128 -> 270
+                            else -> 0
+                        }
+                    val dx =
+                        when (rotation) {
+                            90 -> height - 1 - y
+                            180 -> width - 1 - mx
+                            270 -> y
+                            else -> mx
+                        }
+                    val dy =
+                        when (rotation) {
+                            90 -> mx
+                            180 -> height - 1 - y
+                            270 -> width - 1 - mx
+                            else -> y
+                        }
+                    for (c in 0..3) assertEquals(
+                        "transform $transform pixel $x,$y component $c",
+                        original[((height - 1 - y) * width + x) * 4 + c],
+                        actual[((ph - 1 - dy) * pw + dx) * 4 + c],
+                        .001f,
+                    )
+                }
+                assertEquals(
+                    "Display rotation cannot change edits",
+                    adjustments,
+                    renderer.settings.toString(),
+                )
+                assertArrayEquals(
+                    "Export pixels stay unchanged",
+                    original,
+                    pixels(renderer, width, height),
+                    .0001f,
+                )
+            }
+        } finally {
+            renderer.destroy()
+            bitmap.recycle()
+        }
+    }
 }

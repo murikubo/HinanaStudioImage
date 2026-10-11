@@ -66,6 +66,7 @@ class Renderer {
     std::vector<VkFramebuffer> swapFrames;
     std::vector<VkSemaphore> presented;
     VkExtent2D extent{};
+    VkSurfaceTransformFlagBitsKHR surfaceTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
     bool hdr = false, wantsHDR = false;
     VkFormat windowFormat{};
     size_t uniformBytes{};
@@ -231,6 +232,9 @@ class Renderer {
         lc.pBindings = bindings.data();
         check(vkCreateDescriptorSetLayout(device, &lc, nullptr, &setLayout), "descriptor layout");
         VkPipelineLayoutCreateInfo plc{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+        VkPushConstantRange transformRange{VK_SHADER_STAGE_VERTEX_BIT, 0, 16};
+        plc.pushConstantRangeCount = 1;
+        plc.pPushConstantRanges = &transformRange;
         plc.setLayoutCount = 1;
         plc.pSetLayouts = &setLayout;
         check(vkCreatePipelineLayout(device, &plc, nullptr, &layout), "pipeline layout");
@@ -629,6 +633,11 @@ class Renderer {
                 : VkExtent2D{
                       std::clamp(width, caps.minImageExtent.width, caps.maxImageExtent.width),
                       std::clamp(height, caps.minImageExtent.height, caps.maxImageExtent.height)};
+        surfaceTransform = caps.currentTransform;
+        // currentExtent describes the logical SurfaceView. With pre-rotation, the buffer
+        // must use the panel's native axes; the vertex shader applies the same transform.
+        if (quarterTurn(surfaceTransform))
+            std::swap(extent.width, extent.height);
         uint32_t images = caps.minImageCount + 1;
         if (caps.maxImageCount)
             images = std::min(images, caps.maxImageCount);
@@ -641,7 +650,11 @@ class Renderer {
         ci.imageArrayLayers = 1;
         ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        ci.preTransform = caps.currentTransform;
+        ci.preTransform = surfaceTransform;
+        __android_log_print(ANDROID_LOG_INFO, "HinanaVulkan",
+                            "Geometry logical %ux%u buffer %ux%u currentTransform=%u supported=%u",
+                            width, height, extent.width, extent.height, caps.currentTransform,
+                            caps.supportedTransforms);
         ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         if (!(caps.supportedCompositeAlpha & ci.compositeAlpha))
             ci.compositeAlpha = static_cast<VkCompositeAlphaFlagBitsKHR>(
@@ -693,7 +706,36 @@ class Renderer {
         vkUpdateDescriptorSets(device, writes.size(), writes.data(), 0, nullptr);
         descriptorsDirty = false;
     }
-    void draw(uint32_t w, uint32_t h, const void *values, bool onscreen) {
+    static bool quarterTurn(uint32_t transform) {
+        return transform == VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR ||
+               transform == VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR ||
+               transform == VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90_BIT_KHR ||
+               transform == VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270_BIT_KHR;
+    }
+    static std::array<float, 4> transformRows(uint32_t transform) {
+        // Clockwise transforms in Vulkan's downward-positive screen coordinates.
+        switch (transform) {
+        case VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR:
+            return {0, -1, 1, 0};
+        case VK_SURFACE_TRANSFORM_ROTATE_180_BIT_KHR:
+            return {-1, 0, 0, -1};
+        case VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR:
+            return {0, 1, -1, 0};
+        case VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_BIT_KHR:
+            return {-1, 0, 0, 1};
+        case VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90_BIT_KHR:
+            return {0, -1, -1, 0};
+        case VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_180_BIT_KHR:
+            return {1, 0, 0, -1};
+        case VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270_BIT_KHR:
+            return {0, 1, 1, 0};
+        default:
+            return {1, 0, 0, 1};
+        }
+    }
+    void draw(uint32_t w, uint32_t h, const void *values, bool onscreen,
+              uint32_t offscreenTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) {
+        const uint32_t logicalWidth = w, logicalHeight = h;
         begin();
         std::memcpy(uniforms.mapped, values, uniformBytes);
         updateDescriptors();
@@ -703,11 +745,11 @@ class Renderer {
         uint32_t index = 0;
         if (onscreen) {
             if (!swapchain)
-                resize(w, h);
+                resize(logicalWidth, logicalHeight);
             VkResult result = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, acquired,
                                                     VK_NULL_HANDLE, &index);
             if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-                resize(w, h);
+                resize(logicalWidth, logicalHeight);
                 result = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, acquired,
                                                VK_NULL_HANDLE, &index);
             }
@@ -740,6 +782,8 @@ class Renderer {
         vkCmdSetViewport(command, 0, 1, &vp);
         vkCmdSetScissor(command, 0, 1, &rect);
         vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
+        auto transform = transformRows(onscreen ? surfaceTransform : offscreenTransform);
+        vkCmdPushConstants(command, layout, VK_SHADER_STAGE_VERTEX_BIT, 0, 16, transform.data());
         vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1, &set, 0,
                                 nullptr);
         vkCmdDraw(command, 4, 1, 0, 0);
@@ -770,7 +814,7 @@ class Renderer {
             pi.pImageIndices = &index;
             auto result = vkQueuePresentKHR(queue, &pi);
             if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
-                resize(w, h);
+                resize(logicalWidth, logicalHeight);
             else
                 check(result, "present");
         }
@@ -891,12 +935,13 @@ Java_studio_hinana_image_nativeeditor_NativeVulkan_limit(JNIEnv *env, jobject, j
     }
 }
 extern "C" JNIEXPORT void JNICALL Java_studio_hinana_image_nativeeditor_NativeVulkan_draw(
-    JNIEnv *env, jobject, jlong h, jint w, jint height, jobject values, jboolean screen) {
+    JNIEnv *env, jobject, jlong h, jint w, jint height, jobject values, jboolean screen,
+    jint transform) {
     try {
         auto p = env->GetDirectBufferAddress(values);
         if (!p || env->GetDirectBufferCapacity(values) < jlong(renderer(h)->uniformBytes))
             throw std::runtime_error("Invalid uniforms buffer");
-        renderer(h)->draw(w, height, p, screen);
+        renderer(h)->draw(w, height, p, screen, transform);
     } catch (const std::exception &e) {
         exception(env, e);
     }
