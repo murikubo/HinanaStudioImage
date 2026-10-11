@@ -242,6 +242,8 @@ Android 14 이상에서 HDR 편집 사진은 `JPEG · HDR (Ultra HDR)`를 기본
 
 `갤러리에 저장`은 JPEG를 다시 압축하지 않고 Pictures/Hinana Studio Image 앨범으로 복사합니다. `JPEG · SDR`과 일반 PNG/WebP는 SDR 출력이며, `PNG · 16비트 HDR PQ`는 별도 HDR 출력입니다. HDR 밝기는 HDR JPEG를 지원하는 갤러리·뷰어에서 확인할 수 있습니다.
 
+HDR PQ PNG는 cICP(Rec.2020/PQ) 해석을 지원하는 뷰어가 필요합니다. 일부 Android 갤러리에서는 PQ 픽셀을 SDR로 표시해 색과 대비가 다르게 보일 수 있습니다. v0.14.5부터 내보내기 창에서 이 차이를 안내합니다. Galaxy Z Fold 7 기기 테스트에서 앱의 HDR PNG 재해독은 sRGB/Display P3 색상과 확장 하이라이트를 유지했고, 기본 ImageDecoder 경로는 하이라이트를 복원하지 못했습니다. 갤러리 감상에는 JPEG · HDR을 사용하세요.
+
 ## iOS 0.13.3 사진 가져오기 · HDR 출력
 
 사진 추가 메뉴와 사진 보관함/파일 선택 창의 상태를 분리해 선택 창이 닫히던 문제를 수정했습니다. 사진 보관함에서는 현재 원본 표현을 복사하므로 HEIF·HDR 원본을 JPEG로 먼저 변환하지 않습니다.

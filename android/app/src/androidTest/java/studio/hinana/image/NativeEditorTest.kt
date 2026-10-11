@@ -99,6 +99,79 @@ class NativeEditorTest {
     }
 
     @Test
+    fun hdrPngRoundtripPreservesColoredPixels() {
+        val library = isolated()
+        try {
+            val source = File(library.root, "pq-colors.png")
+            val bitmap = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888)
+            val colors =
+                intArrayOf(
+                    0xffc84628.toInt(),
+                    0xff32aad2.toInt(),
+                    0xffaa78dc.toInt(),
+                    0xffcccccc.toInt(),
+                )
+            for (y in 0..31) for (x in 0..31) bitmap.setPixel(x, y, colors[(y / 16) * 2 + x / 16])
+            source.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            bitmap.recycle()
+            for (space in listOf("srgb", "display-p3")) {
+                val photo = NativePhoto("pq-colors", source.name, source.name, 32, 32)
+                photo.settings
+                    .put("dynamicRange", "hdr")
+                    .put("colorSpace", space)
+                    .put("exposure", 1.0)
+                val output =
+                    NativeExport.export(context, library, photo, "hdr-png", space, 0, 95, false)
+                assertTrue(NativeExport.isPQ(output))
+                val hdr = NativeRenderer.decode(output, 32)
+                try {
+                    for (i in colors.indices) {
+                        val pixel =
+                            hdr.getColor(if (i % 2 == 0) 8 else 24, if (i < 2) 8 else 24).components
+                        val original = colors[i]
+                        val channels =
+                            intArrayOf(
+                                android.graphics.Color.red(original),
+                                android.graphics.Color.green(original),
+                                android.graphics.Color.blue(original),
+                            )
+                        for (c in 0..2) {
+                            fun linear(v: Double) =
+                                if (v <= .04045) v / 12.92 else ((v + .055) / 1.055).pow(2.4)
+                            assertEquals(
+                                "PQ preserves $space color $i channel $c",
+                                linear(channels[c] / 255.0) * 2,
+                                linear(pixel[c].toDouble()),
+                                .012,
+                            )
+                        }
+                    }
+                    if (android.os.Build.VERSION.SDK_INT >= 28) {
+                        val platform =
+                            android.graphics.ImageDecoder.decodeBitmap(
+                                android.graphics.ImageDecoder.createSource(output)
+                            ) { d, _, _ ->
+                                d.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+                            }
+                        try {
+                            android.util.Log.i(
+                                "HinanaPQTest",
+                                "System PNG decoder colorspace=${platform.colorSpace?.name}; extended highlights=${platform.getColor(24,24).components.take(3).any { it > 1f }}",
+                            )
+                        } finally {
+                            platform.recycle()
+                        }
+                    }
+                } finally {
+                    hdr.recycle()
+                }
+            }
+        } finally {
+            library.work.shutdown()
+        }
+    }
+
+    @Test
     fun editedHdrJpegKeepsHighlightsExifAndGalleryBytes() {
         if (android.os.Build.VERSION.SDK_INT < 34) return
         val library = isolated()

@@ -1504,7 +1504,7 @@ class MainActivity : AppCompatActivity() {
                 "JPEG · SDR",
                 "PNG · 8비트 SDR",
                 "PNG · 16비트 SDR",
-                "PNG · 16비트 HDR PQ",
+                "PNG · 16비트 HDR PQ (지원 뷰어용)",
                 "WebP · SDR",
             )
         val keys = mutableListOf("jpeg", "png", "png16", "hdr-png", "webp")
@@ -1542,6 +1542,21 @@ class MainActivity : AppCompatActivity() {
         lateinit var spaceButton: Button
         lateinit var sizeButton: Button
         lateinit var qualityButton: Button
+        val formatNotice =
+            text("").also {
+                it.textSize = 11f
+                it.setTextColor(accent)
+            }
+        fun updateFormatNotice() {
+            formatNotice.text =
+                if (format == "hdr-png")
+                    "HDR PQ PNG는 지원 뷰어에서 확인하세요. 일부 갤러리는 SDR로 해석해 색과 밝기가 달라질 수 있습니다. 갤러리 감상용 HDR은 JPEG · HDR을 권장합니다."
+                else if (format == "hdr-jpeg") "HDR 게인맵을 포함해 저장합니다. HDR 지원 갤러리에서 밝기와 색을 확인할 수 있습니다."
+                else if (p.settings.optString("dynamicRange") == "hdr")
+                    "이 형식은 SDR로 변환해 저장합니다. HDR을 유지하려면 JPEG · HDR 또는 HDR PQ PNG를 선택하세요."
+                else ""
+            formatNotice.visibility = if (formatNotice.text.isEmpty()) View.GONE else View.VISIBLE
+        }
         fun addField(title: String, value: String, action: () -> Unit): Button {
             val caption =
                 text(title).also {
@@ -1560,6 +1575,7 @@ class MainActivity : AppCompatActivity() {
             addField("파일 형식", formats[keys.indexOf(format)]) {
                 choices("파일 형식", formats) { value ->
                     format = keys[formats.indexOf(value)]
+                    updateFormatNotice()
                     formatButton.text = "$value  ⌄"
                     spaceButton.text =
                         if (format == "hdr-png") "Rec.2020 / PQ · HDR"
@@ -1599,6 +1615,8 @@ class MainActivity : AppCompatActivity() {
         spaceButton.isEnabled = format != "hdr-png"
         qualityButton.visibility = if (format.contains("png")) View.GONE else View.VISIBLE
         (qualityButton.tag as? View)?.visibility = qualityButton.visibility
+        updateFormatNotice()
+        card.addView(formatNotice)
         val preserve =
             CheckBox(this).also {
                 it.text = "EXIF 메타데이터 보존"
