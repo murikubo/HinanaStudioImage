@@ -29,6 +29,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var body: LinearLayout
     private lateinit var canvas: NativeCanvas
     private lateinit var controls: LinearLayout
+    private var pendingGallerySave: (() -> Unit)? = null
     private var libraryVisible = false
     private var migrating = false
     private var starsOnly = false
@@ -369,13 +370,47 @@ class MainActivity : AppCompatActivity() {
                         .setType(
                             if (file.extension == "hinanaimage")
                                 "application/vnd.hinana.image-project"
-                            else "image/${file.extension}"
+                            else NativeGallery.mime(file)
                         )
                         .putExtra(Intent.EXTRA_STREAM, uri)
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
-                    "저장·공유",
+                    "공유",
                 )
             )
+        }
+    }
+
+    private fun withGalleryPermission(action: () -> Unit) {
+        if (
+            android.os.Build.VERSION.SDK_INT >= 29 ||
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    this,
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            action()
+        } else {
+            pendingGallerySave = action
+            androidx.core.app.ActivityCompat.requestPermissions(
+                this,
+                arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                701,
+            )
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 701) {
+            val action = pendingGallerySave
+            pendingGallerySave = null
+            if (grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED)
+                action?.invoke()
+            else alert("갤러리에 저장하려면 저장소 권한이 필요합니다. 공유 기능은 권한 없이 사용할 수 있습니다.")
         }
     }
 
@@ -1552,7 +1587,7 @@ class MainActivity : AppCompatActivity() {
                 it.setTextColor(muted)
             }
         )
-        val save = button("↓  이미지 저장·공유") {}
+        val save = button("↓  갤러리에 저장") {}
         save.background =
             GradientDrawable().also {
                 it.setColor(accent)
@@ -1562,28 +1597,45 @@ class MainActivity : AppCompatActivity() {
         card.addView(save, LinearLayout.LayoutParams(-1, dp(42)))
         val dialog = studioDialog(card)
         close.setOnClickListener { dialog.dismiss() }
-        save.setOnClickListener {
+        val send = button("이미지 공유") {}
+        card.addView(send, LinearLayout.LayoutParams(-1, dp(42)))
+        fun export(toGallery: Boolean) {
             val selectedFormat = format
             val selectedSpace = space
             val selectedSize = size
             val selectedQuality = quality
             val keepExif = preserve.isChecked
-            dialog.dismiss()
-            job {
-                share(
-                    NativeExport.export(
-                        this,
-                        library,
-                        p,
-                        selectedFormat,
-                        selectedSpace,
-                        selectedSize,
-                        selectedQuality,
-                        keepExif,
-                    )
-                )
+            val action = {
+                dialog.dismiss()
+                job {
+                    val file =
+                        NativeExport.export(
+                            this,
+                            library,
+                            p,
+                            selectedFormat,
+                            selectedSpace,
+                            selectedSize,
+                            selectedQuality,
+                            keepExif,
+                        )
+                    if (toGallery) {
+                        NativeGallery.save(this, file)
+                        runOnUiThread {
+                            Toast.makeText(
+                                    this,
+                                    "갤러리의 Hinana Studio Image 앨범에 저장했습니다.",
+                                    Toast.LENGTH_LONG,
+                                )
+                                .show()
+                        }
+                    } else share(file)
+                }
             }
+            if (toGallery) withGalleryPermission(action) else action()
         }
+        save.setOnClickListener { export(true) }
+        send.setOnClickListener { export(false) }
     }
 
     override fun onConfigurationChanged(configuration: android.content.res.Configuration) {

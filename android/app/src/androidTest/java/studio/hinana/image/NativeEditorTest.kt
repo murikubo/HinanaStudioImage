@@ -99,6 +99,67 @@ class NativeEditorTest {
     }
 
     @Test
+    fun gallerySavePreservesEncodedImageAndPublishesEntry() {
+        if (android.os.Build.VERSION.SDK_INT < 29) return
+        val bitmap = Bitmap.createBitmap(13, 17, Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(0xffab7532.toInt())
+        try {
+            for ((extension, format) in
+                listOf(
+                    "jpg" to Bitmap.CompressFormat.JPEG,
+                    "png" to Bitmap.CompressFormat.PNG,
+                    "webp" to Bitmap.CompressFormat.WEBP,
+                )) {
+                val file =
+                    File.createTempFile("hinana-gallery-test-", ".$extension", context.cacheDir)
+                try {
+                    file.outputStream().use { assertTrue(bitmap.compress(format, 90, it)) }
+                    val uri = NativeGallery.save(context, file)
+                    try {
+                        context.contentResolver.openInputStream(uri)!!.use {
+                            assertArrayEquals(file.readBytes(), it.readBytes())
+                        }
+                        context.contentResolver
+                            .query(
+                                uri,
+                                arrayOf("mime_type", "relative_path", "is_pending"),
+                                null,
+                                null,
+                                null,
+                            )!!
+                            .use {
+                                assertTrue(it.moveToFirst())
+                                assertEquals(NativeGallery.mime(file), it.getString(0))
+                                assertEquals("Pictures/Hinana Studio Image/", it.getString(1))
+                                assertEquals(0, it.getInt(2))
+                            }
+                    } finally {
+                        context.contentResolver.delete(uri, null, null)
+                    }
+                } finally {
+                    file.delete()
+                }
+            }
+            val missing = File(context.cacheDir, "hinana-missing-${System.nanoTime()}.jpg")
+            try {
+                NativeGallery.save(context, missing)
+                fail("Missing source must fail")
+            } catch (_: java.io.FileNotFoundException) {}
+            context.contentResolver
+                .query(
+                    android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    arrayOf("_id"),
+                    "_display_name = ?",
+                    arrayOf(missing.name),
+                    null,
+                )!!
+                .use { assertEquals("Failed copy leaves no gallery item", 0, it.count) }
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    @Test
     fun oddWidthMonochromeGainmapUpload() = gpu {
         if (android.os.Build.VERSION.SDK_INT < 34) return@gpu
         val base = Bitmap.createBitmap(13, 17, Bitmap.Config.ARGB_8888)
