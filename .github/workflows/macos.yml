@@ -32,6 +32,11 @@ jobs:
       - run: npm test
       - name: Package architecture-specific DMG
         run: npx electron-builder --mac --${{ matrix.arch }} --publish never '-c.mac.artifactName=Hinana-Studio-Image-${version}-macOS-${arch}.${ext}'
+      - name: Verify final app bundle signature
+        run: |
+          APP_PATH=$(find release -maxdepth 2 -type d -name 'Hinana Studio Image.app' -print -quit)
+          test -n "$APP_PATH"
+          node scripts/verify-mac-signature.cjs "$APP_PATH"
       - name: Check native helper architectures
         run: |
           file native/bin/hinana-raw native/bin/hinana-hdr

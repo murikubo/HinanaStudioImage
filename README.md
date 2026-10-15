@@ -305,3 +305,9 @@ Galaxy Z Fold 7에서 GLES/Vulkan 색상·마스크·리퀴파이·회전·자�
 ## Android 0.15.1 Fold 화면 방향 수정
 
 Fold의 외부/내부 디스플레이 전환과 기기 회전 시 Vulkan 표면의 방향을 그리기 좌표와 함께 적용합니다. 90/270도 표면은 출력 버퍼의 폭·높이를 교환하고 버텍스 셰이더에서 사전 회전하므로 사진이 추가로 돌아가거나 비율이 늘어나지 않습니다. 화면 방향 변환은 사진의 회전 보정·원본 파일·내보내기 좌표를 바꾸지 않습니다. 비대칭 사진의 8가지 표면 변환, 보정값과 출력 유지, HDR와 화면 자원 재생성을 실기기에서 검사합니다.
+
+## macOS 0.17.2 앱 번들 서명
+
+`mac.identity: null`로 완성된 앱의 서명을 생략하던 설정을 제거했습니다. 개발 빌드에는 `identity: "-"`로 앱과 중첩 실행 파일을 ad-hoc 서명하고 Hardened Runtime 및 Electron에 필요한 JIT/라이브러리 로딩 권한을 적용합니다. 패키징 후 `codesign --verify --deep --strict`가 실패하면 빌드를 중단하고, macOS CI도 최종 앱을 다시 검증합니다. 기존 0.17.1의 불완전한 Electron 서명은 이 검사에서 실패합니다.
+
+이는 Developer ID 서명이나 Apple 공증을 대신하지 않습니다. 다운로드한 앱의 Gatekeeper 경고 없이 외부 배포하려면 Developer ID Application 인증서로 서명하고 Apple 공증을 마쳐야 합니다. 이 저장소의 기본 개발 빌드는 공증되지 않았으며 다른 Mac에서 다운로드 후 사용자 승인이 필요할 수 있습니다. 검증하려면 `node scripts/verify-mac-signature.cjs '/경로/Hinana Studio Image.app'`를 실행합니다.

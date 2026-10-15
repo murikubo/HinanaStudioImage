@@ -1,6 +1,6 @@
 {
   "name": "hinana-studio-image",
-  "version": "0.17.1",
+  "version": "0.17.2",
   "private": true,
   "license": "UNLICENSED",
   "author": "비나래",
@@ -22,7 +22,7 @@
       "target": [
         "dmg"
       ],
-      "identity": null,
+      "identity": "-",
       "extraResources": [
         {
           "from": "native/bin/hinana-raw",
@@ -64,7 +64,10 @@
             ]
           }
         ]
-      }
+      },
+      "hardenedRuntime": true,
+      "entitlements": "assets/macos/entitlements.plist",
+      "entitlementsInherit": "assets/macos/entitlements.plist"
     },
     "win": {
       "target": [
@@ -120,7 +123,8 @@
           "*.onnx"
         ]
       }
-    ]
+    ],
+    "afterSign": "scripts/verify-mac-signature.cjs"
   },
   "scripts": {
     "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on http://localhost:5173 && node scripts/launch-electron.cjs --dev\"",
