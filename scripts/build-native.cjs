@@ -1,5 +1,30 @@
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
+if (process.platform === 'win32') {
+  const path = require('node:path');
+  fs.mkdirSync('native/bin', { recursive: true });
+  const compiler = path.join(
+    process.env.WINDIR || 'C:\\Windows',
+    'Microsoft.NET',
+    'Framework64',
+    'v4.0.30319',
+    'csc.exe',
+  );
+  const result = spawnSync(
+    compiler,
+    [
+      '/nologo',
+      '/optimize+',
+      '/platform:x64',
+      '/target:exe',
+      `/out:${path.resolve('native/bin/hinana-gpu.exe')}`,
+      path.resolve('native/windows/GpuGeometry.cs'),
+    ],
+    { stdio: 'inherit' },
+  );
+  if (result.error) console.error(result.error.message);
+  process.exit(result.status ?? 1);
+}
 if (process.platform !== 'darwin') {
   console.log('Using the bundled LibRaw WebAssembly decoder on this platform.');
   process.exit(0);

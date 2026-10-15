@@ -1,6 +1,10 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import type { NativeGeometryRequest } from './native-gpu-types';
 contextBridge.exposeInMainWorld('hinana', {
   platform: process.platform,
+  nativeGeometry(request: NativeGeometryRequest) {
+    return ipcRenderer.invoke('gpu:geometry', request);
+  },
   decodeHDRSource(source: string) {
     return ipcRenderer.invoke('image:hdr', source);
   },

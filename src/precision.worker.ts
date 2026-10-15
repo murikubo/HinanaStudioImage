@@ -2,13 +2,26 @@ import { dataURLBytes } from './image-bytes.ts';
 import { decodePrecisionPNG, encodePrecisionPNG, type FloatFrame } from './precision-codec';
 import { linear } from './precision-math';
 import { renderFloat } from './precision-engine';
+import { outputSize } from './engine';
+import { liquifyData } from './liquify';
+import type { NativeGeometryRequest } from '../electron/native-gpu-types';
 import type { Adjustments } from './engine';
 const workerScope = self as unknown as {
   postMessage: (message: unknown, transfer?: Transferable[]) => void;
 };
 let cachedKey = '',
   cached: FloatFrame | undefined;
-self.onmessage = (
+let gpuKey = '',
+  gpuFailed = false;
+let gpuPending:
+  { resolve: (data: Float32Array) => void; reject: (error: Error) => void } | undefined;
+function requestGPU(request: NativeGeometryRequest): Promise<Float32Array> {
+  return new Promise((resolve, reject) => {
+    gpuPending = { resolve, reject };
+    workerScope.postMessage({ kind: 'native-geometry', request });
+  });
+}
+self.onmessage = async (
   event: MessageEvent<{
     id: number;
     key: string;
@@ -17,13 +30,27 @@ self.onmessage = (
     maxSide: number;
     encode?: 'png16' | 'hdr-png';
     output?: 'srgb' | 'display-p3';
+    nativeGPU?: boolean;
+    kind?: string;
+    data?: Float32Array;
+    error?: string;
   }>,
 ) => {
   const request = event.data;
+  if (request.kind === 'native-geometry-result') {
+    const pending = gpuPending;
+    gpuPending = undefined;
+    if (request.error) pending?.reject(new Error(request.error));
+    else if (request.data) pending?.resolve(request.data);
+    else pending?.reject(new Error('Windows GPU 응답이 없습니다.'));
+    return;
+  }
   try {
     if (request.source) {
       cached = undefined;
       cachedKey = '';
+      gpuKey = '';
+      gpuFailed = false;
       const source = request.source;
       if (source.src) {
         const bytes = dataURLBytes(source.src);
@@ -44,7 +71,33 @@ self.onmessage = (
       cachedKey = request.key;
     }
     if (!cached || cachedKey !== request.key) throw Error('고정밀 원본을 다시 불러와 주세요.');
-    const frame = renderFloat(cached, request.a, request.maxSide);
+    let geometry: Float32Array | undefined;
+    if (request.nativeGPU && request.a.liquify && !gpuFailed) {
+      const [cw, ch] = outputSize(cached.width, cached.height, request.a);
+      const scale = Math.min(1, request.maxSide / Math.max(cw, ch));
+      try {
+        geometry = await requestGPU({
+          channel: 'precision',
+          key: cachedKey,
+          source: gpuKey === cachedKey ? undefined : cached.data,
+          width: cached.width,
+          height: cached.height,
+          outputWidth: Math.max(1, Math.round(cw * scale)),
+          outputHeight: Math.max(1, Math.round(ch * scale)),
+          cropWidth: cw,
+          cropHeight: ch,
+          rotation: request.a.rotation,
+          flip: request.a.flip,
+          map: liquifyData(request.a.liquify)!,
+        });
+        gpuKey = cachedKey;
+      } catch (error) {
+        gpuFailed = true;
+        console.warn('Windows Direct3D 11 unavailable; using CPU geometry.', error);
+      }
+    }
+    const frame = renderFloat(cached, request.a, request.maxSide, geometry);
+    if (request.a.liquify) frame.geometryBackend = geometry ? 'direct3d11' : 'cpu';
     if (request.encode) {
       const data = encodePrecisionPNG(
         frame,

@@ -1,6 +1,6 @@
 {
   "name": "hinana-studio-image",
-  "version": "0.15.1",
+  "version": "0.15.2",
   "private": true,
   "license": "UNLICENSED",
   "author": "비나래",
@@ -82,6 +82,12 @@
           "name": "HinanaStudioImage.Project",
           "description": "Hinana Studio Image Project",
           "icon": "assets/document-icon/HinanaImageDocument.ico"
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "native/bin/hinana-gpu.exe",
+          "to": "gpu/hinana-gpu.exe"
         }
       ]
     },

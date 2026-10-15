@@ -2,6 +2,9 @@
 interface Window {
   hinana?: {
     platform: string;
+    nativeGeometry(
+      request: import('../electron/native-gpu-types').NativeGeometryRequest,
+    ): Promise<Float32Array>;
     takeProjectFile(): Promise<{ name: string; text: string } | { error: string } | null>;
     onProjectAvailable(callback: () => void): () => void;
     selectSubject(input: {

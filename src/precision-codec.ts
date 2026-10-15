@@ -25,6 +25,7 @@ export type FloatFrame = {
   data: Float32Array;
   colorSpace: WorkingColorSpace;
   hdr: boolean;
+  geometryBackend?: 'direct3d11' | 'cpu';
 };
 const ascii = (b: Uint8Array, at: number, n: number) =>
   String.fromCharCode(...b.subarray(at, at + n));

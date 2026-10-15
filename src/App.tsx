@@ -1,4 +1,5 @@
 import { LiquifyPanel, LiquifyOverlay } from './LiquifyEditor';
+import { renderPhotoWindows } from './windows-render';
 import {
   nativeIOS,
   NativeImages,
@@ -72,7 +73,6 @@ import {
 import {
   defaults,
   presets,
-  renderPhoto,
   loadImage,
   readDataURL,
   histogram,
@@ -398,7 +398,14 @@ function App() {
           proofSRGB && a.colorSpace === 'display-p3'
             ? document.createElement('canvas')
             : canvas.current;
-        const pixels = renderPhoto(image, working, settings, maxSide);
+        const pixels = await renderPhotoWindows(
+          image,
+          working,
+          settings,
+          maxSide,
+          controller.signal,
+        );
+        if (cancelled || !canvas.current) return;
         if (working !== canvas.current) {
           canvas.current.width = working.width;
           canvas.current.height = working.height;
@@ -862,7 +869,12 @@ function App() {
           );
         }
       } else {
-        renderPhoto(img, target, a, exportSize === 'original' ? Infinity : Number(exportSize));
+        await renderPhotoWindows(
+          img,
+          target,
+          a,
+          exportSize === 'original' ? Infinity : Number(exportSize),
+        );
         encodedCanvas = outputColor === a.colorSpace ? target : convertCanvas(target, outputColor);
         width = target.width;
         height = target.height;

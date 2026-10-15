@@ -11,11 +11,17 @@ import {
   expandHDRHighlights,
 } from './precision-math.ts';
 /** Linear-light geometry, alpha-aware bilinear resampling, then unquantized edits. */
-export function renderFloat(source: FloatFrame, a: Adjustments, maxSide: number): FloatFrame {
+export function renderFloat(
+  source: FloatFrame,
+  a: Adjustments,
+  maxSide: number,
+  geometry?: Float32Array,
+): FloatFrame {
   const [cw, ch] = outputSize(source.width, source.height, a),
     scale = Math.min(1, maxSide / Math.max(cw, ch));
   const width = Math.max(1, Math.round(cw * scale)),
     height = Math.max(1, Math.round(ch * scale));
+  if (geometry && geometry.length !== width * height * 4) throw Error('GPU 출력 크기가 다릅니다.');
   const data = new Float32Array(width * height * 4),
     angle = (a.rotation * Math.PI) / 180,
     cos = Math.round(Math.cos(angle)),
@@ -28,37 +34,50 @@ export function renderFloat(source: FloatFrame, a: Adjustments, maxSide: number)
     for (let x = 0; x < width; x++) {
       const dx = ((x + 0.5) / width - 0.5) * cw * (a.flip ? -1 : 1),
         dy = ((y + 0.5) / height - 0.5) * ch;
-      let sx = cos * dx + sin * dy + source.width / 2 - 0.5,
-        sy = -sin * dx + cos * dy + source.height / 2 - 0.5;
-      if (warp) {
-        sampleLiquifyInto(warp, (sx + 0.5) / source.width, (sy + 0.5) / source.height, warpOffset);
-        sx += warpOffset[0] * source.width;
-        sy += warpOffset[1] * source.height;
-      }
-      const fx = Math.floor(sx),
-        fy = Math.floor(sy),
-        tx = sx - fx,
-        ty = sy - fy;
       let r = 0,
         g = 0,
         b = 0,
         alpha = 0;
-      for (let j = 0; j < 2; j++)
-        for (let k = 0; k < 2; k++) {
-          const xx = Math.max(0, Math.min(source.width - 1, fx + k)),
-            yy = Math.max(0, Math.min(source.height - 1, fy + j)),
-            p = (yy * source.width + xx) * 4;
-          const w = (k ? tx : 1 - tx) * (j ? ty : 1 - ty),
-            wa = w * source.data[p + 3];
-          alpha += wa;
-          r += source.data[p] * wa;
-          g += source.data[p + 1] * wa;
-          b += source.data[p + 2] * wa;
+      if (geometry) {
+        const p = (y * width + x) * 4;
+        r = geometry[p];
+        g = geometry[p + 1];
+        b = geometry[p + 2];
+        alpha = geometry[p + 3];
+      } else {
+        let sx = cos * dx + sin * dy + source.width / 2 - 0.5,
+          sy = -sin * dx + cos * dy + source.height / 2 - 0.5;
+        if (warp) {
+          sampleLiquifyInto(
+            warp,
+            (sx + 0.5) / source.width,
+            (sy + 0.5) / source.height,
+            warpOffset,
+          );
+          sx += warpOffset[0] * source.width;
+          sy += warpOffset[1] * source.height;
         }
-      if (alpha > 0) {
-        r /= alpha;
-        g /= alpha;
-        b /= alpha;
+        const fx = Math.floor(sx),
+          fy = Math.floor(sy),
+          tx = sx - fx,
+          ty = sy - fy;
+        for (let j = 0; j < 2; j++)
+          for (let k = 0; k < 2; k++) {
+            const xx = Math.max(0, Math.min(source.width - 1, fx + k)),
+              yy = Math.max(0, Math.min(source.height - 1, fy + j)),
+              p = (yy * source.width + xx) * 4;
+            const w = (k ? tx : 1 - tx) * (j ? ty : 1 - ty),
+              wa = w * source.data[p + 3];
+            alpha += wa;
+            r += source.data[p] * wa;
+            g += source.data[p + 1] * wa;
+            b += source.data[p + 2] * wa;
+          }
+        if (alpha > 0) {
+          r /= alpha;
+          g /= alpha;
+          b /= alpha;
+        }
       }
       if (matrix) [r, g, b] = transform(matrix, r, g, b);
       const i = (y * width + x) * 4;

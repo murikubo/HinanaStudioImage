@@ -28,6 +28,21 @@ function getWorker() {
   if (!worker) {
     worker = new Worker(new URL('./precision.worker.ts', import.meta.url), { type: 'module' });
     worker.onmessage = (e) => {
+      if (e.data.kind === 'native-geometry') {
+        const target = worker;
+        void window
+          .hinana!.nativeGeometry(e.data.request)
+          .then((data) => {
+            target?.postMessage({ kind: 'native-geometry-result', data }, [data.buffer]);
+          })
+          .catch((error) => {
+            target?.postMessage({
+              kind: 'native-geometry-result',
+              error: (error as Error).message,
+            });
+          });
+        return;
+      }
       const job = pending.get(e.data.id);
       if (!job) return;
       pending.delete(e.data.id);
@@ -97,7 +112,19 @@ async function executePrecision(
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reset(new Error('고정밀 처리 시간이 초과되었습니다.')), 180_000);
     pending.set(id, { resolve, reject, timer });
-    w.postMessage({ id, key: sourceKey, source, a, maxSide, encode, output }, transfers);
+    w.postMessage(
+      {
+        id,
+        key: sourceKey,
+        source,
+        a,
+        maxSide,
+        encode,
+        output,
+        nativeGPU: window.hinana?.platform === 'win32',
+      },
+      transfers,
+    );
   });
 }
 // Serialize work and skip stale previews before allocating or decoding a source.
@@ -170,6 +197,7 @@ export function paintFloat(
   hdr: boolean,
   peak: number,
 ): Uint8ClampedArray {
+  canvas.dataset.liquifyBackend = frame.geometryBackend || 'none';
   canvas.width = frame.width;
   canvas.height = frame.height;
   const activeHDR = hdr && hdrCanvasSupported();
