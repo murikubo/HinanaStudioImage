@@ -1,4 +1,6 @@
 import { LiquifyPanel, LiquifyOverlay } from './LiquifyEditor';
+import PresetLibrary from './PresetLibrary';
+import { capturePreset, type PresetKind } from './preset-library';
 import { renderPhotoWindows } from './windows-render';
 import {
   nativeIOS,
@@ -103,6 +105,8 @@ const sections: {
       { key: 'skinSmooth', name: '피부 부드럽게', min: 0 },
       { key: 'skinRedness', name: '붉은 기 완화', min: 0 },
       { key: 'skinBrightness', name: '피부 밝기', min: 0 },
+      { key: 'skinUniformity', name: '피부 톤 균일화', min: 0 },
+      { key: 'skinShine', name: '피부 번들거림 완화', min: 0 },
     ],
   },
   {
@@ -316,7 +320,7 @@ function App() {
     let obsolete = false;
     setSaveStatus('저장 중…');
     const timer = setTimeout(() => {
-      saveWorkspace({ version: 6, photos, selected })
+      saveWorkspace({ version: 7, photos, selected })
         .then(() => {
           if (!obsolete) {
             setSavedSnapshot({ photos, selected });
@@ -450,6 +454,24 @@ function App() {
         return { ...p, adjustments: next, history, cursor: history.length - 1 };
       }),
     );
+  }
+  function syncPreset(kind: PresetKind, starred: boolean) {
+    const values = capturePreset(a, kind);
+    const targets = photos.filter((p) => p.id !== selected && (!starred || p.rating > 0));
+    if (!targets.length) {
+      notify('동기화할 다른 사진이 없습니다.');
+      return;
+    }
+    const ids = new Set(targets.map((p) => p.id));
+    setPhotos((current) =>
+      current.map((p) => {
+        if (!ids.has(p.id)) return p;
+        const next = { ...p.adjustments, ...structuredClone(values) };
+        const history = [...p.history.slice(0, p.cursor + 1), next].slice(-60);
+        return { ...p, adjustments: next, history, cursor: history.length - 1 };
+      }),
+    );
+    notify(`${targets.length}장에 보정을 동기화했습니다.`);
   }
   async function recognizeSubject(mask: LocalMask, point: MaskPoint) {
     if (!active || subjectJob.current) return;
@@ -705,7 +727,7 @@ function App() {
         new Blob(
           [
             JSON.stringify({
-              version: 6,
+              version: 7,
               // Reopening already starts a new undo history; do not duplicate raster masks in JSON.
               photos: photos.map((p) => ({ ...p, history: [], cursor: 0 })),
               selected,
@@ -1222,6 +1244,8 @@ function App() {
                     skinSmooth: a.skinSmooth,
                     skinRedness: a.skinRedness,
                     skinBrightness: a.skinBrightness,
+                    skinUniformity: a.skinUniformity,
+                    skinShine: a.skinShine,
                     crop: a.crop,
                     rotation: a.rotation,
                     flip: a.flip,
@@ -1245,6 +1269,16 @@ function App() {
             </button>
           ))}
         </div>
+        <PresetLibrary
+          a={a}
+          disabled={!active || !!busy || subjectBusy}
+          count={photos.length}
+          onApply={(values) => {
+            change(values, true);
+            setCompare(false);
+          }}
+          onSync={syncPreset}
+        />
         <div className="sidebar-bottom">
           <div className="local-badge">
             <span />

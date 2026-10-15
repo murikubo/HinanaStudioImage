@@ -4,6 +4,7 @@ import { applyLocalMasks, type LocalMask } from './local-masks.ts';
 import { colorContext, type WorkingColorSpace } from './color-space.ts';
 import { applyColorTools, colorDefaults, type ColorAdjustments } from './color-tools.ts';
 import { retouchSkin } from './retouch.ts';
+import { applyCube, type CubeLut } from './cube-lut.ts';
 export type Adjustments = ColorAdjustments & {
   masks: LocalMask[];
   liquify: Liquify | null;
@@ -15,6 +16,10 @@ export type Adjustments = ColorAdjustments & {
   skinSmooth: number;
   skinRedness: number;
   skinBrightness: number;
+  skinUniformity: number;
+  skinShine: number;
+  colorLut: CubeLut | null;
+  colorLutAmount: number;
   exposure: number;
   contrast: number;
   highlights: number;
@@ -43,6 +48,10 @@ export const defaults: Adjustments = {
   skinSmooth: 0,
   skinRedness: 0,
   skinBrightness: 0,
+  skinUniformity: 0,
+  skinShine: 0,
+  colorLut: null,
+  colorLutAmount: 100,
   exposure: 0,
   contrast: 0,
   highlights: 0,
@@ -178,6 +187,7 @@ export function adjustPixels(
     data[i + 2] = limit((b * (1 - fade * 0.5) + fade * 40) * v);
   }
   applyColorTools(data, a);
+  applyCube(data, a.colorLut, a.colorLutAmount, a.colorSpace);
 }
 export function outputSize(width: number, height: number, a: Adjustments): [number, number] {
   if (Math.abs(a.rotation) % 180 === 90) [width, height] = [height, width];

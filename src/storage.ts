@@ -1,4 +1,5 @@
 import { validateLiquify } from './liquify.ts';
+import { validateCube } from './cube-lut.ts';
 import { validateMasks } from './local-masks.ts';
 import { readMetadata, type Metadata } from './metadata';
 import { defaults, type Adjustments } from './engine';
@@ -16,7 +17,7 @@ export type Photo = {
   history: Adjustments[];
   cursor: number;
 };
-export type Project = { version: 1 | 2 | 3 | 4 | 5 | 6; photos: Photo[]; selected: string };
+export type Project = { version: 1 | 2 | 3 | 4 | 5 | 6 | 7; photos: Photo[]; selected: string };
 function db(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const r = indexedDB.open('hinana-image', 1);
@@ -74,7 +75,8 @@ export function validateProject(value: unknown): Project {
       p.version !== 3 &&
       p.version !== 4 &&
       p.version !== 5 &&
-      p.version !== 6) ||
+      p.version !== 6 &&
+      p.version !== 7) ||
     !Array.isArray(p.photos) ||
     p.photos.length > 200
   )
@@ -134,7 +136,8 @@ export function validateProject(value: unknown): Project {
       if (typeof a[key] === 'number' && key !== 'rotation' && key !== 'hdrPeak') {
         const limit = key === 'exposure' ? 3 : 100;
         if (
-          ((key.startsWith('skin') || key === 'hdrHighlights') && (a[key] as number) < 0) ||
+          ((key.startsWith('skin') || key === 'hdrHighlights' || key === 'colorLutAmount') &&
+            (a[key] as number) < 0) ||
           Math.abs(a[key] as number) > limit
         )
           throw new Error('보정 값 범위를 초과했습니다.');
@@ -142,6 +145,7 @@ export function validateProject(value: unknown): Project {
     }
     a.masks = validateMasks(a.masks);
     a.liquify = validateLiquify(a.liquify);
+    a.colorLut = validateCube(a.colorLut);
     photo.adjustments = a;
     photo.history = [a];
     photo.cursor = 0;

@@ -84,7 +84,7 @@ try {
   assert.deepEqual(await pixels(), edited);
   await page.getByTitle('프로젝트 저장 (⌘/Ctrl S)').click();
   const project = JSON.parse(await waitFile('Hinana-Workspace.hinanaimage'));
-  assert.equal(project.version, 6);
+  assert.equal(project.version, 7);
   assert.equal(project.photos[0].adjustments.liquify.width, 129);
   await page.getByRole('button', { name: '내보내기', exact: true }).click();
   await page.getByLabel('파일 형식', { exact: true }).selectOption('png');

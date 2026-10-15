@@ -3,6 +3,8 @@ export type SkinSettings = {
   skinSmooth: number;
   skinRedness: number;
   skinBrightness: number;
+  skinUniformity?: number;
+  skinShine?: number;
   colorSpace?: WorkingColorSpace;
 };
 const smoothstep = (a: number, b: number, v: number) => {
@@ -30,17 +32,20 @@ export function retouchSkin(
   height: number,
   a: SkinSettings,
 ) {
-  if (!a.skinSmooth && !a.skinRedness && !a.skinBrightness) return;
+  if (!a.skinSmooth && !a.skinRedness && !a.skinBrightness && !a.skinUniformity && !a.skinShine)
+    return;
   const source = data.slice();
-  const maskAt = (i: number) =>
-    a.colorSpace === 'display-p3'
-      ? skinWeight(...p3ToSRGB(source[i], source[i + 1], source[i + 2]))
-      : skinWeight(source[i], source[i + 1], source[i + 2]);
+  const maskAt = (i: number) => {
+    const gain = Math.max(1, source[i] / 255, source[i + 1] / 255, source[i + 2] / 255);
+    return a.colorSpace === 'display-p3'
+      ? skinWeight(...p3ToSRGB(source[i] / gain, source[i + 1] / gain, source[i + 2] / gain))
+      : skinWeight(source[i] / gain, source[i + 1] / gain, source[i + 2] / gain);
+  };
   const masks = new Float32Array(data.length / 4);
   for (let i = 0; i < data.length; i += 4) masks[i / 4] = maskAt(i);
   const radius = Math.max(1, Math.min(12, Math.round(Math.min(width, height) * 0.003)));
   let blurred = source;
-  if (a.skinSmooth > 0) {
+  if (a.skinSmooth > 0 || (a.skinUniformity || 0) > 0) {
     for (const horizontal of [true, false]) {
       const out =
         data instanceof Float32Array
@@ -90,13 +95,29 @@ export function retouchSkin(
     let r = source[i] + (blurred[i] - source[i]) * mix;
     let g = source[i + 1] + (blurred[i + 1] - source[i + 1]) * mix;
     let b = source[i + 2] + (blurred[i + 2] - source[i + 2]) * mix;
+    if (a.skinUniformity) {
+      const l = Math.max(1, 0.2126 * r + 0.7152 * g + 0.0722 * b);
+      const target = Math.max(
+        1,
+        0.2126 * blurred[i] + 0.7152 * blurred[i + 1] + 0.0722 * blurred[i + 2],
+      );
+      const amount = ((mask * a.skinUniformity) / 100) * 0.75;
+      r += ((blurred[i] * l) / target - r) * amount;
+      g += ((blurred[i + 1] * l) / target - g) * amount;
+      b += ((blurred[i + 2] * l) / target - b) * amount;
+    }
     const red = ((Math.max(0, r - g - 18) * mask * a.skinRedness) / 100) * 0.45;
     r -= red;
     g += red * 0.45;
     b += red * 0.2;
     const light = ((mask * a.skinBrightness) / 100) * 18;
-    data[i] = r + light;
-    data[i + 1] = g + light;
-    data[i + 2] = b + light;
+    const shine =
+      1 -
+      ((mask * (a.skinShine || 0)) / 100) *
+        0.25 *
+        smoothstep(160, 235, 0.2126 * r + 0.7152 * g + 0.0722 * b);
+    data[i] = r * shine + light;
+    data[i + 1] = g * shine + light;
+    data[i + 2] = b * shine + light;
   }
 }

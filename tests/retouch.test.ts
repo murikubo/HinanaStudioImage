@@ -2,6 +2,22 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { retouchSkin, skinWeight } from '../src/retouch.ts';
 const off = { skinSmooth: 0, skinRedness: 0, skinBrightness: 0 };
+test('shine reduction darkens selected highlights, preserves background/alpha and handles HDR P3', () => {
+  const pixels = new Float32Array([220, 185, 155, 120, 20, 50, 220, 255, 440, 370, 310, 255]);
+  const before = pixels.slice();
+  retouchSkin(pixels, 3, 1, {
+    ...off,
+    skinShine: 100,
+    skinUniformity: 30,
+    colorSpace: 'display-p3',
+  });
+  assert.ok(pixels.every(Number.isFinite));
+  assert.ok(pixels[0] < before[0]);
+  assert.deepEqual([...pixels.slice(4, 8)], [...before.slice(4, 8)]);
+  assert.equal(pixels[3], 120);
+  assert.equal(pixels[11], 255);
+  assert.ok(pixels[8] > 255);
+});
 test('zero retouch is exactly neutral', () => {
   const p = new Uint8ClampedArray([185, 125, 100, 128]);
   const before = p.slice();

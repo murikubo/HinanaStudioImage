@@ -325,6 +325,101 @@ button.icon-button {
   margin-top: auto;
   padding: 35px 7px 16px;
 }
+.preset-library {
+  margin-top: 20px;
+  padding: 14px 6px;
+  border-top: 1px solid #303235;
+  flex-shrink: 0;
+}
+.preset-library h3 {
+  font-size: 12px;
+  margin: 0 0 14px;
+}
+.preset-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 11px;
+  margin: 12px 0;
+}
+.preset-field input:not([type='range']),
+.preset-field select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  color: #dce1de;
+  background: #24282a;
+  border: 1px solid #41484a;
+  border-radius: 5px;
+}
+.preset-field output {
+  color: #c1d5a8;
+}
+.preset-field input[type='range'] {
+  width: 100%;
+}
+.preset-note,
+.preset-feedback,
+.preset-notice p {
+  font-size: 10px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.preset-note {
+  color: #98a29f;
+}
+.preset-feedback {
+  color: #c9dcb4;
+}
+.preset-library button {
+  white-space: normal;
+  text-align: left;
+  padding: 9px 7px;
+  border-radius: 5px;
+}
+.user-preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 270px;
+  overflow: auto;
+}
+.user-preset-list button {
+  flex-shrink: 0;
+  justify-content: flex-start;
+  border: 1px solid transparent;
+}
+.user-preset-list button[aria-pressed='true'] {
+  background: #323d31;
+  border-color: #718467;
+}
+.user-preset-list small {
+  display: block;
+  font-size: 9px;
+  color: #a7b1ac;
+  margin-top: 4px;
+}
+.preset-library summary {
+  font-size: 11px;
+  cursor: pointer;
+  padding: 10px 0;
+}
+.preset-manage > button,
+.preset-actions button {
+  width: 100%;
+  margin-top: 6px;
+  background: #2b3130;
+}
+.preset-notice {
+  color: #decba4;
+}
+.preset-check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 10px;
+  margin: 14px 0 5px;
+}
 .local-badge {
   display: flex;
   gap: 7px;
