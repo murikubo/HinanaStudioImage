@@ -12,8 +12,10 @@ jobs:
         include:
           - runner: macos-15
             arch: arm64
+            nativeArch: arm64
           - runner: macos-15-intel
             arch: x64
+            nativeArch: x86_64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     env:
@@ -33,8 +35,8 @@ jobs:
       - name: Check native helper architectures
         run: |
           file native/bin/hinana-raw native/bin/hinana-hdr
-          lipo -verify_arch ${{ matrix.arch }} native/bin/hinana-raw
-          lipo -verify_arch ${{ matrix.arch }} native/bin/hinana-hdr
+          lipo native/bin/hinana-raw -verify_arch ${{ matrix.nativeArch }}
+          lipo native/bin/hinana-hdr -verify_arch ${{ matrix.nativeArch }}
       - name: Test packaged app and preset persistence/import/export
         run: |
           APP_PATH=$(find release -maxdepth 2 -type d -name 'Hinana Studio Image.app' -print -quit)
