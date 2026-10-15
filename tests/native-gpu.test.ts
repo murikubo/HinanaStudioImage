@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { NativeGPUProcess, validateGeometry } from '../electron/native-gpu-process.ts';
-import { defaults, outputSize } from '../src/engine.ts';
+import { defaults, outputSize, cropOffset } from '../src/engine.ts';
 import { renderFloat } from '../src/precision-engine.ts';
 import { encodeLiquify, newLiquifyData, pushLiquify } from '../src/liquify.ts';
 import type { NativeGeometryRequest } from '../electron/native-gpu-types.ts';
@@ -76,11 +76,15 @@ test(
             colorSpace: 'display-p3' as const,
             dynamicRange: 'hdr' as const,
             crop: '4:3',
+            cropZoom: 45,
+            cropX: 70,
+            cropY: -35,
             rotation,
             flip,
             liquify: encodeLiquify(map),
           };
           const [cw, ch] = outputSize(37, 23, a);
+          const [offsetX, offsetY] = cropOffset(37, 23, a);
           for (const maxSide of [Infinity, 13]) {
             const scale = Math.min(1, maxSide / Math.max(cw, ch));
             const data = await gpu.render({
@@ -91,6 +95,8 @@ test(
               source: first ? source.data : undefined,
               cropWidth: cw,
               cropHeight: ch,
+              offsetX,
+              offsetY,
               outputWidth: Math.max(1, Math.round(cw * scale)),
               outputHeight: Math.max(1, Math.round(ch * scale)),
             });

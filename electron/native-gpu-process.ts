@@ -16,6 +16,10 @@ export function validateGeometry(r: NativeGeometryRequest) {
     r.cropWidth <= 0 ||
     !Number.isFinite(r.cropHeight) ||
     r.cropHeight <= 0 ||
+    !Number.isFinite(r.offsetX ?? 0) ||
+    !Number.isFinite(r.offsetY ?? 0) ||
+    Math.abs(r.offsetX ?? 0) > r.width + r.height ||
+    Math.abs(r.offsetY ?? 0) > r.width + r.height ||
     ![0, 90, 180, 270, -90, -180, -270].includes(r.rotation) ||
     typeof r.flip !== 'boolean' ||
     !(r.map instanceof Float32Array) ||
@@ -128,9 +132,9 @@ export class NativeGPUProcess {
     if (!r.source && (this.key !== r.key || this.dimensions !== dimensions))
       throw new Error('Windows GPU 원본을 다시 전송해야 합니다.');
     const child = this.start();
-    const header = Buffer.alloc(44);
+    const header = Buffer.alloc(52);
     [
-      0x48475031,
+      0x48475032,
       r.width,
       r.height,
       r.outputWidth,
@@ -144,6 +148,8 @@ export class NativeGPUProcess {
       Math.round(Math.cos(angle)),
       Math.round(Math.sin(angle)),
       r.flip ? -1 : 1,
+      r.offsetX ?? 0,
+      r.offsetY ?? 0,
     ].forEach((n, i) => header.writeFloatLE(n, 24 + i * 4));
     return new Promise((resolve, reject) => {
       this.pending = {

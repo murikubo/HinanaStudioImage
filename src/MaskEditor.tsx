@@ -348,6 +348,8 @@ export function MaskOverlay({
     geometry.flip,
     geometry.cropWidth,
     geometry.cropHeight,
+    geometry.offsetX,
+    geometry.offsetY,
   ]);
   useEffect(() => {
     const cancel = (e: KeyboardEvent) => {

@@ -9,14 +9,13 @@ export type UserPreset = {
   values: Partial<Adjustments>;
   warnings: string[];
 };
-const excluded = new Set(['rotation', 'hdrPeak', 'hdrHighlights']);
+const excluded = new Set(['rotation', 'hdrPeak', 'hdrHighlights', 'cropX', 'cropY', 'cropZoom']);
+const isPortrait = (key: string) => /^(skin|face|body)/.test(key);
 export const presetKeys = Object.keys(defaults).filter(
   (k) => typeof defaults[k as keyof Adjustments] === 'number' && !excluded.has(k),
 );
 function inGroup(key: string, kind: PresetKind) {
-  return (
-    kind === 'combined' || (kind === 'portrait' ? key.startsWith('skin') : !key.startsWith('skin'))
-  );
+  return kind === 'combined' || (kind === 'portrait' ? isPortrait(key) : !isPortrait(key));
 }
 export function capturePreset(a: Adjustments, kind: PresetKind): Partial<Adjustments> {
   const values = Object.fromEntries(
@@ -230,6 +229,7 @@ export const portraitPresets: UserPreset[] = [
       skinBrightness: 5,
       skinUniformity: 20,
       skinShine: 10,
+      skinGloss: 0,
     },
     warnings: [],
   },
@@ -243,6 +243,7 @@ export const portraitPresets: UserPreset[] = [
       skinBrightness: 8,
       skinUniformity: 35,
       skinShine: 50,
+      skinGloss: 0,
     },
     warnings: [],
   },
@@ -256,6 +257,7 @@ export const portraitPresets: UserPreset[] = [
       skinBrightness: 12,
       skinUniformity: 30,
       skinShine: 20,
+      skinGloss: 0,
       contrast: -8,
       highlights: -15,
       shadows: 12,

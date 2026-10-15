@@ -1,6 +1,6 @@
 {
   "name": "hinana-studio-image",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "private": true,
   "license": "UNLICENSED",
   "author": "비나래",
@@ -124,8 +124,8 @@
   },
   "scripts": {
     "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on http://localhost:5173 && node scripts/launch-electron.cjs --dev\"",
-    "build:electron": "node scripts/fetch-subject-model.mjs && npm run build:native && tsc -p electron/tsconfig.json && node scripts/copy-runtime.cjs",
-    "build": "tsc && vite build && npm run build:electron",
+    "build:electron": "node scripts/prepare-portrait.mjs && node scripts/fetch-subject-model.mjs && npm run build:native && tsc -p electron/tsconfig.json && node scripts/copy-runtime.cjs",
+    "build": "node scripts/prepare-portrait.mjs && tsc && vite build && npm run build:electron",
     "preview": "vite preview",
     "start": "node scripts/launch-electron.cjs",
     "dist:win": "npm run build && electron-builder --win --x64 --publish never",
@@ -164,6 +164,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "8.5.2",
+    "@mediapipe/tasks-vision": "1.1.1",
     "@playwright/test": "^1.63.0",
     "@types/node": "26.1.1",
     "@types/react": "19.2.17",

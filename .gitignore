@@ -15,6 +15,7 @@ native/bin/
 !.env.example
 
 /models/
+/public/portrait/
 
 # Mobile build/signing state
 *.jks

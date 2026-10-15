@@ -184,7 +184,7 @@ try {
   const project = JSON.parse(
     await download(page.getByTitle('프로젝트 저장 (⌘/Ctrl S)'), 'project.hinanaimage'),
   );
-  assert.equal(project.version, 7);
+  assert.equal(project.version, 8);
   assert.equal(project.photos[0].adjustments.colorLut.size, 2);
   await page.reload();
   await settled();
@@ -194,7 +194,7 @@ try {
   await page.screenshot({ path: 'release/preset-library.png' });
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: portrait edits, undo/redo, saved preset reload/rename/reuse, scoped sync, XMP parsing/apply/export, CUBE apply/undo/export/import, invalid file rejection, LUT project v7 and persistence.',
+    'PASS: portrait edits, undo/redo, saved preset reload/rename/reuse, scoped sync, XMP parsing/apply/export, CUBE apply/undo/export/import, invalid file rejection, LUT project v8 and persistence.',
   );
 } catch (error) {
   console.error('Renderer errors:', errors);

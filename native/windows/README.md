@@ -25,9 +25,9 @@ to 32MP; unsupported devices, lost devices, helper exits and timeouts fall back 
 the previous CPU (float) or WebGL (legacy) path for that source. Reloading/changing
 the source permits a retry. Closing the window or quitting kills its helpers.
 
-The little-endian pipe request is: magic `0x48475031`, source width/height, output
+The little-endian pipe request is: magic `0x48475032`, source width/height, output
 width/height, upload byte count (six uint32 values total), crop width/height,
-cosine/sine, flip sign (five float32 values), displacement map, then optional float4
+cosine/sine, flip sign, oriented crop offsets X/Y (seven float32 values), displacement map, then optional float4
 source pixels. A response is byte count (uint32) followed by float4 output pixels.
 All requests are serialized and bounded; cached sources are checked against a key
 and dimensions before use. The native COM vtable slots follow the Windows SDK's

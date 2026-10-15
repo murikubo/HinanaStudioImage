@@ -2,7 +2,8 @@ import { dataURLBytes } from './image-bytes.ts';
 import { decodePrecisionPNG, encodePrecisionPNG, type FloatFrame } from './precision-codec';
 import { linear } from './precision-math';
 import { renderFloat } from './precision-engine';
-import { outputSize } from './engine';
+import { outputSize, cropOffset } from './engine';
+import { withPortraitWarp } from './portrait-ai';
 import { liquifyData } from './liquify';
 import type { NativeGeometryRequest } from '../electron/native-gpu-types';
 import type { Adjustments } from './engine';
@@ -46,6 +47,7 @@ self.onmessage = async (
     return;
   }
   try {
+    request.a = withPortraitWarp(request.a);
     if (request.source) {
       cached = undefined;
       cachedKey = '';
@@ -75,6 +77,7 @@ self.onmessage = async (
     if (request.nativeGPU && request.a.liquify && !gpuFailed) {
       const [cw, ch] = outputSize(cached.width, cached.height, request.a);
       const scale = Math.min(1, request.maxSide / Math.max(cw, ch));
+      const [offsetX, offsetY] = cropOffset(cached.width, cached.height, request.a);
       try {
         geometry = await requestGPU({
           channel: 'precision',
@@ -86,6 +89,8 @@ self.onmessage = async (
           outputHeight: Math.max(1, Math.round(ch * scale)),
           cropWidth: cw,
           cropHeight: ch,
+          offsetX,
+          offsetY,
           rotation: request.a.rotation,
           flip: request.a.flip,
           map: liquifyData(request.a.liquify)!,

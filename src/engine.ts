@@ -5,6 +5,7 @@ import { colorContext, type WorkingColorSpace } from './color-space.ts';
 import { applyColorTools, colorDefaults, type ColorAdjustments } from './color-tools.ts';
 import { retouchSkin } from './retouch.ts';
 import { applyCube, type CubeLut } from './cube-lut.ts';
+import { withPortraitWarp, type PortraitLandmarks } from './portrait-ai.ts';
 export type Adjustments = ColorAdjustments & {
   masks: LocalMask[];
   liquify: Liquify | null;
@@ -18,6 +19,18 @@ export type Adjustments = ColorAdjustments & {
   skinBrightness: number;
   skinUniformity: number;
   skinShine: number;
+  skinGloss: number;
+  faceWidth: number;
+  faceJaw: number;
+  faceEyes: number;
+  faceNose: number;
+  bodyWaist: number;
+  bodyShoulders: number;
+  bodyHips: number;
+  portraitLandmarks: PortraitLandmarks | null;
+  cropZoom: number;
+  cropX: number;
+  cropY: number;
   colorLut: CubeLut | null;
   colorLutAmount: number;
   exposure: number;
@@ -50,6 +63,18 @@ export const defaults: Adjustments = {
   skinBrightness: 0,
   skinUniformity: 0,
   skinShine: 0,
+  skinGloss: 0,
+  faceWidth: 0,
+  faceJaw: 0,
+  faceEyes: 0,
+  faceNose: 0,
+  bodyWaist: 0,
+  bodyShoulders: 0,
+  bodyHips: 0,
+  portraitLandmarks: null,
+  cropZoom: 0,
+  cropX: 0,
+  cropY: 0,
   colorLut: null,
   colorLutAmount: 100,
   exposure: 0,
@@ -197,7 +222,16 @@ export function outputSize(width: number, height: number, a: Adjustments): [numb
     if (width / height > ratio) width = Math.round(height * ratio);
     else height = Math.round(width / ratio);
   }
-  return [width, height];
+  const zoom = 1 - (a.cropZoom || 0) * 0.0075;
+  return [Math.max(1, Math.round(width * zoom)), Math.max(1, Math.round(height * zoom))];
+}
+export function cropOffset(width: number, height: number, a: Adjustments): [number, number] {
+  const [cw, ch] = outputSize(width, height, a);
+  if (Math.abs(a.rotation) % 180 === 90) [width, height] = [height, width];
+  return [
+    (((width - cw) / 2) * (a.cropX || 0)) / 100,
+    (((height - ch) / 2) * (a.cropY || 0)) / 100,
+  ];
 }
 export function renderPhoto(
   image: HTMLImageElement,
@@ -205,14 +239,16 @@ export function renderPhoto(
   a: Adjustments,
   maxSide = 1600,
 ) {
+  a = withPortraitWarp(a);
   const [w, h] = outputSize(image.naturalWidth, image.naturalHeight, a);
+  const [offsetX, offsetY] = cropOffset(image.naturalWidth, image.naturalHeight, a);
   const scale = Math.min(1, maxSide / Math.max(w, h));
   canvas.width = Math.max(1, Math.round(w * scale));
   canvas.height = Math.max(1, Math.round(h * scale));
   const ctx = colorContext(canvas, a.colorSpace);
   const picture = a.liquify ? warpedImage(image, a.liquify, scale, a.colorSpace) : image;
   ctx.save();
-  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.translate(canvas.width / 2 - offsetX * scale, canvas.height / 2 - offsetY * scale);
   ctx.scale(a.flip ? -1 : 1, 1);
   ctx.rotate((a.rotation * Math.PI) / 180);
   ctx.drawImage(
@@ -235,6 +271,8 @@ export function renderPhoto(
       height: image.naturalHeight,
       cropWidth: w,
       cropHeight: h,
+      offsetX,
+      offsetY,
       rotation: a.rotation,
       flip: a.flip,
     },

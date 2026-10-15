@@ -1,5 +1,6 @@
 import { validateLiquify } from './liquify.ts';
 import { validateCube } from './cube-lut.ts';
+import { validatePortrait } from './portrait-ai.ts';
 import { validateMasks } from './local-masks.ts';
 import { readMetadata, type Metadata } from './metadata';
 import { defaults, type Adjustments } from './engine';
@@ -17,7 +18,7 @@ export type Photo = {
   history: Adjustments[];
   cursor: number;
 };
-export type Project = { version: 1 | 2 | 3 | 4 | 5 | 6 | 7; photos: Photo[]; selected: string };
+export type Project = { version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8; photos: Photo[]; selected: string };
 function db(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const r = indexedDB.open('hinana-image', 1);
@@ -76,7 +77,8 @@ export function validateProject(value: unknown): Project {
       p.version !== 4 &&
       p.version !== 5 &&
       p.version !== 6 &&
-      p.version !== 7) ||
+      p.version !== 7 &&
+      p.version !== 8) ||
     !Array.isArray(p.photos) ||
     p.photos.length > 200
   )
@@ -146,6 +148,8 @@ export function validateProject(value: unknown): Project {
     a.masks = validateMasks(a.masks);
     a.liquify = validateLiquify(a.liquify);
     a.colorLut = validateCube(a.colorLut);
+    a.portraitLandmarks = validatePortrait(a.portraitLandmarks);
+    if (a.cropZoom < 0 || a.cropZoom > 100) throw Error('크롭 확대 범위가 올바르지 않습니다.');
     photo.adjustments = a;
     photo.history = [a];
     photo.cursor = 0;

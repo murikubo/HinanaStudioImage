@@ -1,4 +1,5 @@
-import { adjustPixels, outputSize, renderPhoto, type Adjustments } from './engine';
+import { adjustPixels, outputSize, cropOffset, renderPhoto, type Adjustments } from './engine';
+import { withPortraitWarp } from './portrait-ai';
 import { applyLocalMasks } from './local-masks';
 import { colorContext } from './color-space';
 import { liquifyData } from './liquify';
@@ -16,6 +17,7 @@ export function renderPhotoWindows(
   maxSide = 1600,
   signal?: AbortSignal,
 ): Promise<ImageData> {
+  a = withPortraitWarp(a);
   const result = queue.then(async () => {
     if (signal?.aborted) throw new DOMException('오래된 미리보기', 'AbortError');
     if (cachedImage !== image || cachedSpace !== a.colorSpace) failed = false;
@@ -26,6 +28,7 @@ export function renderPhotoWindows(
     }
     try {
       const [cw, ch] = outputSize(image.naturalWidth, image.naturalHeight, a);
+      const [offsetX, offsetY] = cropOffset(image.naturalWidth, image.naturalHeight, a);
       const scale = Math.min(1, maxSide / Math.max(cw, ch));
       const width = Math.max(1, Math.round(cw * scale)),
         height = Math.max(1, Math.round(ch * scale));
@@ -55,6 +58,8 @@ export function renderPhotoWindows(
         outputHeight: height,
         cropWidth: cw,
         cropHeight: ch,
+        offsetX,
+        offsetY,
         rotation: a.rotation,
         flip: a.flip,
         map: liquifyData(a.liquify)!,
@@ -78,6 +83,8 @@ export function renderPhotoWindows(
           height: image.naturalHeight,
           cropWidth: cw,
           cropHeight: ch,
+          offsetX,
+          offsetY,
           rotation: a.rotation,
           flip: a.flip,
         },

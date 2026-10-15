@@ -43,3 +43,14 @@ Mobile filesystem: @capacitor/filesystem 8.1.4 (MIT).
 Mobile sharing: @capacitor/share 8.0.3 (MIT).
 https://github.com/ionic-team/capacitor-plugins.
 Their license texts accompany the web and mobile assets in public/licenses.
+
+# MediaPipe Tasks Vision / portrait models
+
+MediaPipe Tasks Vision 1.1.1 and the official Face Landmarker (float16/1) and
+Pose Landmarker Lite (float16/1) bundles are distributed for local inference.
+MediaPipe is Copyright Google LLC, licensed under Apache License 2.0; a copy is
+included in `licenses/MediaPipe-Apache-2.0.txt` and the packaged portrait assets.
+Sources: https://github.com/google-ai-edge/mediapipe and
+https://storage.googleapis.com/mediapipe-models/ .
+The pinned model URLs and SHA-256 digests are in `scripts/prepare-portrait.mjs`.
+No face-recognition identity, age, or gender classification is implemented.

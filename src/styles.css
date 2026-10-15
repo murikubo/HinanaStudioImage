@@ -420,6 +420,49 @@ button.icon-button {
   font-size: 10px;
   margin: 14px 0 5px;
 }
+.preset-field textarea {
+  width: 100%;
+  resize: vertical;
+  color: #dce1de;
+  background: #24282a;
+  border: 1px solid #41484a;
+  padding: 8px;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.portrait-panel > button {
+  margin: 8px 16px;
+  padding: 9px 12px;
+  background: #303c32;
+  border-radius: 5px;
+}
+.portrait-status {
+  margin: 8px 16px;
+  color: #b9cda7;
+  font-size: 10px;
+}
+.skin-finishes {
+  display: flex;
+  gap: 6px;
+  padding: 0 16px 12px;
+}
+.skin-finishes button {
+  background: #29312c;
+  padding: 7px 10px;
+  border-radius: 5px;
+}
+.crop-bar {
+  flex-wrap: wrap;
+}
+.crop-bar label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 10px;
+}
+.crop-bar input[type='range'] {
+  width: 85px;
+}
 .local-badge {
   display: flex;
   gap: 7px;

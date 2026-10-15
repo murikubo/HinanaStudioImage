@@ -13,6 +13,7 @@ import {
   type UserPreset,
 } from './preset-library';
 import { saveFile } from './mobile';
+import { createPresetToken, readPresetToken } from './preset-token';
 
 const names = { portrait: '인물', color: '색감', combined: '인물 + 색감' };
 export default function PresetLibrary({
@@ -38,6 +39,7 @@ export default function PresetLibrary({
     [amount, setAmount] = useState(100);
   const [filter, setFilter] = useState('all'),
     [starred, setStarred] = useState(false);
+  const [token, setToken] = useState('');
   const input = useRef<HTMLInputElement>(null);
   const all = [...portraitPresets, ...library];
   const chosen = all.find((p) => p.id === selected),
@@ -302,6 +304,67 @@ export default function PresetLibrary({
         <p className="preset-note">
           Hinana · XMP 기본 색상/HSL · 3D CUBE(sRGB) 지원. 이보토 공유 토큰·AI 설정은 지원하지
           않습니다.
+        </p>
+        <label className="preset-field">
+          Hinana 공유 토큰
+          <textarea
+            aria-label="Hinana 공유 토큰"
+            rows={3}
+            maxLength={1500000}
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+          />
+        </label>
+        <button
+          disabled={!chosen || saving}
+          onClick={() => {
+            if (!chosen) return;
+            setSaving(true);
+            void createPresetToken(chosen)
+              .then((value) => {
+                setToken(value);
+                setFeedback(
+                  '공유 토큰을 만들었습니다. 사진·인식 좌표 없이 프리셋 설정만 포함합니다.',
+                );
+              })
+              .catch((e) => setFeedback((e as Error).message))
+              .finally(() => setSaving(false));
+          }}
+        >
+          선택 프리셋 토큰 만들기
+        </button>
+        <button
+          disabled={!token || saving}
+          onClick={() => {
+            void navigator.clipboard
+              .writeText(token)
+              .then(() => setFeedback('토큰을 복사했습니다.'))
+              .catch(() => setFeedback('토큰 입력란을 선택해 직접 복사해 주세요.'));
+          }}
+        >
+          토큰 복사
+        </button>
+        <button
+          disabled={!token || !loaded || saving}
+          onClick={() => {
+            setSaving(true);
+            void readPresetToken(token)
+              .then(async (preset) => {
+                if (await persist([...library, preset], '공유 프리셋을 가져왔습니다.')) {
+                  setSelected(preset.id);
+                  setName(preset.name);
+                  setKind(preset.kind);
+                }
+              })
+              .catch((e) => setFeedback(`토큰 가져오기 실패: ${(e as Error).message}`))
+              .finally(() => setSaving(false));
+          }}
+        >
+          Hinana 토큰 가져오기
+        </button>
+        <p className="preset-note">
+          토큰은 서버 없이 보정 설정을 담습니다. 받은 사람이 읽을 수 있으며 만료·회수되지 않습니다.
+          큰 LUT는 파일로 공유하세요.
         </p>
         <label className="preset-check">
           <input type="checkbox" checked={starred} onChange={(e) => setStarred(e.target.checked)} />

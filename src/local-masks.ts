@@ -26,6 +26,8 @@ export type MaskGeometry = {
   height: number;
   cropWidth: number;
   cropHeight: number;
+  offsetX?: number;
+  offsetY?: number;
   rotation: number;
   flip: boolean;
 };
@@ -63,16 +65,16 @@ export function maskToDisplay(p: MaskPoint, g: MaskGeometry): MaskPoint {
   const x = (p.x - 0.5) * g.width,
     y = (p.y - 0.5) * g.height;
   return {
-    x: 0.5 + ((c * x - s * y) * (g.flip ? -1 : 1)) / g.cropWidth,
-    y: 0.5 + (s * x + c * y) / g.cropHeight,
+    x: 0.5 + ((c * x - s * y) * (g.flip ? -1 : 1) - (g.offsetX || 0)) / g.cropWidth,
+    y: 0.5 + (s * x + c * y - (g.offsetY || 0)) / g.cropHeight,
   };
 }
 export function maskToSource(p: MaskPoint, g: MaskGeometry): MaskPoint {
   const angle = (g.rotation * Math.PI) / 180,
     c = Math.round(Math.cos(angle)),
     s = Math.round(Math.sin(angle));
-  const x = (p.x - 0.5) * g.cropWidth * (g.flip ? -1 : 1),
-    y = (p.y - 0.5) * g.cropHeight;
+  const x = ((p.x - 0.5) * g.cropWidth + (g.offsetX || 0)) * (g.flip ? -1 : 1),
+    y = (p.y - 0.5) * g.cropHeight + (g.offsetY || 0);
   return { x: 0.5 + (c * x + s * y) / g.width, y: 0.5 + (-s * x + c * y) / g.height };
 }
 const clamp = (v: number) => Math.max(0, Math.min(1, v));

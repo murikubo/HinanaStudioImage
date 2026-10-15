@@ -63,7 +63,7 @@ RWStructuredBuffer<float4> result : register(u0);
 cbuffer Geometry : register(b0) {
  uint sw; uint sh; uint ow; uint oh;
  float cw; float ch; float cosine; float sine;
- float flip; float pad0; float pad1; float pad2;
+ float flip; float offsetX; float offsetY; float pad;
 };
 float2 displacement(float2 p) {
  float2 g = saturate(p) * 128.0;
@@ -76,8 +76,8 @@ float2 displacement(float2 p) {
 [numthreads(16,16,1)]
 void main(uint3 id : SV_DispatchThreadID) {
  if (id.x >= ow || id.y >= oh) return;
- float dx = ((id.x + 0.5) / ow - 0.5) * cw * flip;
- float dy = ((id.y + 0.5) / oh - 0.5) * ch;
+ float dx = (((id.x + 0.5) / ow - 0.5) * cw + offsetX) * flip;
+ float dy = ((id.y + 0.5) / oh - 0.5) * ch + offsetY;
  float2 p = float2(cosine*dx+sine*dy+sw*0.5-0.5,
                   -sine*dx+cosine*dy+sh*0.5-0.5);
  p += displacement((p+0.5)/float2(sw,sh))*float2(sw,sh);
@@ -162,7 +162,7 @@ void main(uint3 id : SV_DispatchThreadID) {
         while (true) {
             uint magic;
             try { magic = input.ReadUInt32(); } catch (EndOfStreamException) { return; }
-            if (magic != 0x48475031) throw new Exception("Invalid GPU protocol");
+            if (magic != 0x48475032) throw new Exception("Invalid GPU protocol");
             int sw = input.ReadInt32(), sh = input.ReadInt32(), ow = input.ReadInt32(), oh = input.ReadInt32();
             int uploadBytes = input.ReadInt32();
             if (sw < 1 || sh < 1 || ow < 1 || oh < 1 || (long)sw*sh > 32000000 || (long)ow*oh > 32000000)
@@ -172,7 +172,7 @@ void main(uint3 id : SV_DispatchThreadID) {
             byte[] config = new byte[48];
             using (var c = new BinaryWriter(new MemoryStream(config))) {
                 c.Write(sw); c.Write(sh); c.Write(ow); c.Write(oh);
-                for (int i=0;i<5;i++) {
+                for (int i=0;i<7;i++) {
                     float value = input.ReadSingle();
                     if (float.IsNaN(value) || float.IsInfinity(value)) throw new Exception("Invalid GPU geometry");
                     c.Write(value);

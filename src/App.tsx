@@ -1,4 +1,13 @@
 import { LiquifyPanel, LiquifyOverlay } from './LiquifyEditor';
+import PortraitPanel from './PortraitPanel';
+import { detectPortrait } from './portrait-client';
+import {
+  hasPortraitEdits,
+  portraitCrop,
+  faceKeys,
+  bodyKeys,
+  type PortraitLandmarks,
+} from './portrait-ai';
 import PresetLibrary from './PresetLibrary';
 import { capturePreset, type PresetKind } from './preset-library';
 import { renderPhotoWindows } from './windows-render';
@@ -79,6 +88,7 @@ import {
   readDataURL,
   histogram,
   outputSize,
+  cropOffset,
   type Adjustments,
 } from './engine';
 import { appInfo } from './app-info';
@@ -107,6 +117,7 @@ const sections: {
       { key: 'skinBrightness', name: '피부 밝기', min: 0 },
       { key: 'skinUniformity', name: '피부 톤 균일화', min: 0 },
       { key: 'skinShine', name: '피부 번들거림 완화', min: 0 },
+      { key: 'skinGloss', name: '피부 글로시', min: 0 },
     ],
   },
   {
@@ -190,6 +201,7 @@ function App() {
     [toast, setToast] = useState(''),
     [saveMessage, setSaveStatus] = useState('로컬 저장 준비');
   const [removeId, setRemoveId] = useState('');
+  const [portraitBusy, setPortraitBusy] = useState(false);
   const [liquifyRadius, setLiquifyRadius] = useState(0.1),
     [liquifyStrength, setLiquifyStrength] = useState(0.5);
   const [view, setView] = useState<'edit' | 'grid'>('edit'),
@@ -320,7 +332,7 @@ function App() {
     let obsolete = false;
     setSaveStatus('저장 중…');
     const timer = setTimeout(() => {
-      saveWorkspace({ version: 7, photos, selected })
+      saveWorkspace({ version: 8, photos, selected })
         .then(() => {
           if (!obsolete) {
             setSavedSnapshot({ photos, selected });
@@ -364,8 +376,31 @@ function App() {
               rotation: a.rotation,
               flip: a.flip,
               crop: a.crop,
+              cropZoom: a.cropZoom,
+              cropX: a.cropX,
+              cropY: a.cropY,
             }
           : a;
+        if (hasPortraitEdits(settings) && !settings.portraitLandmarks) {
+          setPortraitBusy(true);
+          try {
+            const result = await detectPortrait(image);
+            if (cancelled) return;
+            publishPortrait(active.id, active.src, result);
+            if (faceKeys.some((k) => settings[k]) && !result.faces.length)
+              notify('이 사진에서 얼굴을 인식하지 못해 얼굴 보정을 적용하지 않았습니다.');
+            else if (
+              bodyKeys.some((k) => settings[k]) &&
+              !result.poses.some((p) =>
+                [11, 12, 23, 24].every((i) => (p[i].visibility || 0) >= 0.65),
+              )
+            )
+              notify('신체 인식 신뢰도가 낮아 체형 보정을 적용하지 않았습니다.');
+          } finally {
+            setPortraitBusy(false);
+          }
+          return;
+        }
         const [previewWidth, previewHeight] = outputSize(active.width, active.height, settings);
         const maxSide = previewMaxSide(
           previewWidth,
@@ -454,6 +489,37 @@ function App() {
         return { ...p, adjustments: next, history, cursor: history.length - 1 };
       }),
     );
+  }
+  function publishPortrait(id: string, src: string, result: PortraitLandmarks) {
+    setPhotos((current) =>
+      current.map((p) =>
+        p.id === id && p.src === src
+          ? {
+              ...p,
+              adjustments: { ...p.adjustments, portraitLandmarks: result },
+              history: p.history.map((a) => ({ ...a, portraitLandmarks: result })),
+            }
+          : p,
+      ),
+    );
+  }
+  async function analyzePortrait() {
+    if (!active || portraitBusy) return;
+    setPortraitBusy(true);
+    const photo = active;
+    try {
+      const image =
+        imageCache.current.get(photo.id) || (await loadImage(photo.src, photo.nativePreview));
+      imageCache.current.set(photo.id, image);
+      const result = await detectPortrait(image);
+      publishPortrait(photo.id, photo.src, result);
+      if (!result.faces.length && !result.poses.length)
+        notify('얼굴·체형을 인식하지 못했습니다. 다른 사진을 사용해 주세요.');
+    } catch (e) {
+      notify(`인물 인식 실패: ${(e as Error).message}`);
+    } finally {
+      setPortraitBusy(false);
+    }
   }
   function syncPreset(kind: PresetKind, starred: boolean) {
     const values = capturePreset(a, kind);
@@ -727,7 +793,7 @@ function App() {
         new Blob(
           [
             JSON.stringify({
-              version: 7,
+              version: 8,
               // Reopening already starts a new undo history; do not duplicate raster masks in JSON.
               photos: photos.map((p) => ({ ...p, history: [], cursor: 0 })),
               selected,
@@ -857,6 +923,12 @@ function App() {
       const img =
           imageCache.current.get(active.id) || (await loadImage(active.src, active.nativePreview)),
         target = document.createElement('canvas');
+      let exportSettings = a;
+      if (hasPortraitEdits(a) && !a.portraitLandmarks) {
+        const result = await detectPortrait(img);
+        exportSettings = { ...a, portraitLandmarks: result };
+        publishPortrait(active.id, active.src, result);
+      }
       const outputColor = exportColor === 'working' ? a.colorSpace : exportColor;
       const highOutput = format === 'png16' || format === 'hdr-png';
       if (highOutput && a.precision !== 'float')
@@ -869,7 +941,7 @@ function App() {
         const result = await requestPrecision(
           active.src,
           img,
-          a,
+          exportSettings,
           exportSize === 'original' ? Infinity : Number(exportSize),
           highOutput ? (format as 'png16' | 'hdr-png') : undefined,
           outputColor,
@@ -894,7 +966,7 @@ function App() {
         await renderPhotoWindows(
           img,
           target,
-          a,
+          exportSettings,
           exportSize === 'original' ? Infinity : Number(exportSize),
         );
         encodedCanvas = outputColor === a.colorSpace ? target : convertCanvas(target, outputColor);
@@ -1037,7 +1109,7 @@ function App() {
   }, [exportOpen, helpOpen, aboutOpen, busy]);
   const changed = (Object.keys(defaults) as (keyof Adjustments)[]).some(
     (key) =>
-      !['colorSpace', 'precision', 'dynamicRange', 'hdrPeak'].includes(key) &&
+      !['colorSpace', 'precision', 'dynamicRange', 'hdrPeak', 'portraitLandmarks'].includes(key) &&
       JSON.stringify(a[key]) !== JSON.stringify(defaults[key]),
   );
   const [mobileSection, setMobileSection] = useState<'photos' | 'tools' | 'presets'>('tools');
@@ -1246,6 +1318,11 @@ function App() {
                     skinBrightness: a.skinBrightness,
                     skinUniformity: a.skinUniformity,
                     skinShine: a.skinShine,
+                    ...capturePreset(a, 'portrait'),
+                    portraitLandmarks: a.portraitLandmarks,
+                    cropX: a.cropX,
+                    cropY: a.cropY,
+                    cropZoom: a.cropZoom,
                     crop: a.crop,
                     rotation: a.rotation,
                     flip: a.flip,
@@ -1410,6 +1487,8 @@ function App() {
                       height: active.height,
                       cropWidth: dimensions[0],
                       cropHeight: dimensions[1],
+                      offsetX: cropOffset(active.width, active.height, a)[0],
+                      offsetY: cropOffset(active.width, active.height, a)[1],
                       rotation: a.rotation,
                       flip: a.flip,
                     }}
@@ -1429,6 +1508,8 @@ function App() {
                       height: active.height,
                       cropWidth: dimensions[0],
                       cropHeight: dimensions[1],
+                      offsetX: cropOffset(active.width, active.height, a)[0],
+                      offsetY: cropOffset(active.width, active.height, a)[1],
                       rotation: a.rotation,
                       flip: a.flip,
                     }}
@@ -1522,15 +1603,46 @@ function App() {
             </div>
             {cropOpen && (
               <div className="crop-bar">
-                <span>가운데 기준 자르기</span>
+                <span>자유 위치 크롭</span>
                 {['original', '1:1', '4:5', '3:2', '16:9'].map((r) => (
                   <button
                     key={r}
                     className={a.crop === r ? 'active' : ''}
-                    onClick={() => change({ crop: r }, true)}
+                    onClick={() =>
+                      change(
+                        {
+                          crop: r,
+                          ...(r === 'original' ? { cropZoom: 0, cropX: 0, cropY: 0 } : {}),
+                        },
+                        true,
+                      )
+                    }
                   >
                     {r === 'original' ? '원본' : r}
                   </button>
+                ))}
+                {(['cropZoom', 'cropX', 'cropY'] as const).map((key) => (
+                  <label key={key}>
+                    {
+                      { cropZoom: '크롭 확대', cropX: '크롭 가로 위치', cropY: '크롭 세로 위치' }[
+                        key
+                      ]
+                    }
+                    <input
+                      aria-label={
+                        { cropZoom: '크롭 확대', cropX: '크롭 가로 위치', cropY: '크롭 세로 위치' }[
+                          key
+                        ]
+                      }
+                      type="range"
+                      min={key === 'cropZoom' ? 0 : -100}
+                      max="100"
+                      value={a[key]}
+                      onChange={(e) => change({ [key]: +e.target.value })}
+                      onPointerUp={() => change({}, true)}
+                      onKeyUp={() => change({}, true)}
+                    />
+                  </label>
                 ))}
                 <button
                   className="icon-button"
@@ -1936,6 +2048,18 @@ function App() {
                 <span>프로파일</span>
                 <span>Hinana Color</span>
               </div>
+              <PortraitPanel
+                a={a}
+                busy={portraitBusy}
+                disabled={!active || compare || !!busy}
+                onAnalyze={() => void analyzePortrait()}
+                onChange={change}
+                onCrop={() => {
+                  if (!active) return;
+                  change(portraitCrop(active.width, active.height, a), true);
+                  setCropOpen(true);
+                }}
+              />
               {sections.map((section) => (
                 <details key={section.title} open>
                   <summary>
@@ -1948,6 +2072,23 @@ function App() {
                       피부색 영역을 자동 선택해 보정합니다. 얼굴 인식 방식이 아니므로 비슷한 색의
                       배경에도 적용될 수 있습니다.
                     </p>
+                  )}
+                  {section.title === '피부 보정' && (
+                    <div className="skin-finishes">
+                      {[
+                        { name: '매트', gloss: 0, shine: 60 },
+                        { name: '새틴', gloss: 18, shine: 20 },
+                        { name: '듀이', gloss: 50, shine: 0 },
+                      ].map((p) => (
+                        <button
+                          key={p.name}
+                          disabled={!active || compare}
+                          onClick={() => change({ skinGloss: p.gloss, skinShine: p.shine }, true)}
+                        >
+                          {p.name}
+                        </button>
+                      ))}
+                    </div>
                   )}
                   <div className="sliders">
                     {section.keys.map((control) => (

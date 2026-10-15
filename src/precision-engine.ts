@@ -1,6 +1,7 @@
 import { liquifyData, sampleLiquifyInto } from './liquify.ts';
 import { applyLocalMasks } from './local-masks.ts';
-import { adjustPixels, outputSize, type Adjustments } from './engine.ts';
+import { adjustPixels, outputSize, cropOffset, type Adjustments } from './engine.ts';
+import { withPortraitWarp } from './portrait-ai.ts';
 import { type FloatFrame } from './precision-codec.ts';
 import {
   P3_SRGB,
@@ -17,10 +18,12 @@ export function renderFloat(
   maxSide: number,
   geometry?: Float32Array,
 ): FloatFrame {
+  a = withPortraitWarp(a);
   const [cw, ch] = outputSize(source.width, source.height, a),
     scale = Math.min(1, maxSide / Math.max(cw, ch));
   const width = Math.max(1, Math.round(cw * scale)),
     height = Math.max(1, Math.round(ch * scale));
+  const [offsetX, offsetY] = cropOffset(source.width, source.height, a);
   if (geometry && geometry.length !== width * height * 4) throw Error('GPU 출력 크기가 다릅니다.');
   const data = new Float32Array(width * height * 4),
     angle = (a.rotation * Math.PI) / 180,
@@ -32,8 +35,8 @@ export function renderFloat(
     warpOffset = new Float64Array(2);
   for (let y = 0; y < height; y++)
     for (let x = 0; x < width; x++) {
-      const dx = ((x + 0.5) / width - 0.5) * cw * (a.flip ? -1 : 1),
-        dy = ((y + 0.5) / height - 0.5) * ch;
+      const dx = (((x + 0.5) / width - 0.5) * cw + offsetX) * (a.flip ? -1 : 1),
+        dy = ((y + 0.5) / height - 0.5) * ch + offsetY;
       let r = 0,
         g = 0,
         b = 0,
@@ -101,6 +104,8 @@ export function renderFloat(
       height: source.height,
       cropWidth: cw,
       cropHeight: ch,
+      offsetX,
+      offsetY,
       rotation: a.rotation,
       flip: a.flip,
     },

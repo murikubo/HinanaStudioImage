@@ -5,6 +5,7 @@ export type SkinSettings = {
   skinBrightness: number;
   skinUniformity?: number;
   skinShine?: number;
+  skinGloss?: number;
   colorSpace?: WorkingColorSpace;
 };
 const smoothstep = (a: number, b: number, v: number) => {
@@ -32,7 +33,14 @@ export function retouchSkin(
   height: number,
   a: SkinSettings,
 ) {
-  if (!a.skinSmooth && !a.skinRedness && !a.skinBrightness && !a.skinUniformity && !a.skinShine)
+  if (
+    !a.skinSmooth &&
+    !a.skinRedness &&
+    !a.skinBrightness &&
+    !a.skinUniformity &&
+    !a.skinShine &&
+    !a.skinGloss
+  )
     return;
   const source = data.slice();
   const maskAt = (i: number) => {
@@ -116,8 +124,14 @@ export function retouchSkin(
       ((mask * (a.skinShine || 0)) / 100) *
         0.25 *
         smoothstep(160, 235, 0.2126 * r + 0.7152 * g + 0.0722 * b);
-    data[i] = r * shine + light;
-    data[i + 1] = g * shine + light;
-    data[i + 2] = b * shine + light;
+    const gain = Math.max(1, r / 255, g / 255, b / 255);
+    const gloss =
+      ((mask * (a.skinGloss || 0)) / 100) *
+      smoothstep(110, 220, (0.2126 * r + 0.7152 * g + 0.0722 * b) / gain) *
+      24 *
+      gain;
+    data[i] = r * shine + light + gloss;
+    data[i + 1] = g * shine + light + gloss;
+    data[i + 2] = b * shine + light + gloss;
   }
 }

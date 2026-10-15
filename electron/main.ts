@@ -1,6 +1,7 @@
 import { registerSubjectSelector } from './subject';
 import { registerRawDecoder } from './raw';
 import { registerNativeGPU } from './native-gpu';
+import { registerPortraitAssets } from './portrait-assets';
 import { app, BrowserWindow, Menu, shell, nativeTheme } from 'electron';
 import path from 'node:path';
 import { queueProjectArguments, queueProjectFile, registerProjectFiles } from './project-files';
@@ -58,6 +59,7 @@ app.whenReady().then(() => {
   nativeTheme.themeSource = 'dark';
   registerRawDecoder();
   registerNativeGPU();
+  registerPortraitAssets();
   registerSubjectSelector();
   registerProjectFiles();
   Menu.setApplicationMenu(

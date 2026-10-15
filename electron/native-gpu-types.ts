@@ -9,6 +9,8 @@ export type NativeGeometryRequest = {
   outputHeight: number;
   cropWidth: number;
   cropHeight: number;
+  offsetX?: number;
+  offsetY?: number;
   rotation: number;
   flip: boolean;
   map: Float32Array;
